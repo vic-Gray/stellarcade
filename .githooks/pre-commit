@@ -1,38 +1,43 @@
 #!/bin/bash
 # Pre-Commit Hook for Stellarcade
-# Ensures code is formatted and linted before every commit.
-
+# Formats only the contract crates and backend files that are staged.
+# Enable this hook: git config core.hooksPath .githooks
 set -e
 
 echo "🔍 Running pre-commit checks..."
 
-# 1. Format Rust Contracts
-echo "🦀 Formatting Rust contracts..."
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+STAGED=$(git diff --cached --name-only)
+
+# ── 1. Format touched Rust contract crates ───────────────────────────────────
 if command -v cargo >/dev/null 2>&1; then
-    # Shared
-    cd contracts/shared && cargo fmt --all && cd ../..
-    # Prize Pool
-    cd contracts/prize-pool && cargo fmt --all && cd ../..
-    # Random Generator
-    cd contracts/random-generator && cargo fmt --all && cd ../..
-    # Coin Flip
-    cd contracts/coin-flip && cargo fmt --all && cd ../..
+    FORMATTED_ANY=0
+    for crate_dir in "$REPO_ROOT"/contracts/*/; do
+        crate=$(basename "$crate_dir")
+        [ -f "$crate_dir/Cargo.toml" ] || continue
+        [ -d "$crate_dir/src" ] || continue
+        if echo "$STAGED" | grep -q "^contracts/$crate/"; then
+            echo "🦀 Formatting $crate..."
+            (cd "$crate_dir" && cargo fmt --all)
+            FORMATTED_ANY=1
+        fi
+    done
+    [ $FORMATTED_ANY -eq 0 ] && echo "ℹ️  No contract crates staged — skipping Rust formatting."
 else
-    echo "⚠️ Cargo not found, skipping Rust formatting."
+    echo "⚠️  Cargo not found, skipping Rust formatting."
 fi
 
-# 2. Format and Lint Backend
-echo "📦 Formatting and linting backend..."
-if command -v npm >/dev/null 2>&1; then
-    cd backend
-    npm run format >/dev/null 2>&1
-    npm run lint -- --fix
-    cd ..
-else
-    echo "⚠️ NPM not found, skipping backend checks."
+# ── 2. Format and lint staged backend files ───────────────────────────────────
+if echo "$STAGED" | grep -q "^backend/"; then
+    echo "📦 Formatting and linting backend..."
+    if command -v npm >/dev/null 2>&1; then
+        (cd "$REPO_ROOT/backend" && npm run format >/dev/null 2>&1 && npm run lint -- --fix)
+    else
+        echo "⚠️  NPM not found, skipping backend checks."
+    fi
 fi
 
-# 3. Add changed tracked files back to the commit
+# ── 3. Re-stage any files that were auto-formatted ───────────────────────────
 git add -u
 
 echo "✅ Pre-commit checks passed!"

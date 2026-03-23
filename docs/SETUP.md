@@ -19,14 +19,22 @@ Follow these steps to set up Stellarcade for local development.
    cd stellarcade
    ```
 
-2. Install Backend dependencies:
+2. **Enable Git hooks** (required — mirrors CI checks locally):
+
+   ```bash
+   git config core.hooksPath .githooks
+   ```
+
+   This activates the pre-commit formatter and the pre-push validator (contract fmt/clippy/test + doc sync). Without this step, CI failures will not be caught before you push.
+
+3. Install Backend dependencies:
 
    ```bash
    cd backend
    npm install
    ```
 
-3. Setup environment variables:
+4. Setup environment variables:
    ```bash
    cp .env.example .env
    # Edit .env with your local settings
