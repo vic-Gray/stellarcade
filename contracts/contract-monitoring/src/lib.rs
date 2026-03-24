@@ -7,6 +7,7 @@ pub const PERSISTENT_BUMP_LEDGERS: u32 = 518_400;
 const FAILED_SETTLEMENT_ALERT_THRESHOLD: u64 = 3;
 const ERROR_RATE_ALERT_PERCENT: u64 = 20;
 const ERROR_RATE_MIN_SAMPLE: u64 = 10;
+pub const MAX_RECENT_EVENTS: u32 = 200;
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -16,6 +17,7 @@ pub enum Error {
     NotInitialized = 2,
     NotAuthorized = 3,
     DuplicateEvent = 4,
+    InvalidWindowSize = 5,
 }
 
 #[contracttype]
@@ -25,6 +27,7 @@ pub enum DataKey {
     Paused,
     Metrics,
     SeenEvent(u64),
+    RecentEvents,
 }
 
 #[contracttype]
@@ -32,9 +35,16 @@ pub enum DataKey {
 pub enum EventKind {
     SettlementSuccess = 0,
     SettlementFailed = 1,
-    Error = 2,
+    ContractError = 2,
     Paused = 3,
     Resumed = 4,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TimedEvent {
+    pub timestamp: u64,
+    pub kind: EventKind,
 }
 
 #[contracttype]
@@ -100,6 +110,15 @@ impl ContractMonitoring {
         env.storage().persistent().set(&seen_key, &true);
         env.storage().persistent().extend_ttl(&seen_key, PERSISTENT_BUMP_LEDGERS, PERSISTENT_BUMP_LEDGERS);
 
+        // Record timed event for sliding window
+        let now = env.ledger().timestamp();
+        let mut recent_events: soroban_sdk::Vec<TimedEvent> = env.storage().instance().get(&DataKey::RecentEvents).unwrap_or_else(|| soroban_sdk::Vec::new(&env));
+        recent_events.push_back(TimedEvent { timestamp: now, kind: kind.clone() });
+        if recent_events.len() > MAX_RECENT_EVENTS {
+            recent_events.pop_front();
+        }
+        env.storage().instance().set(&DataKey::RecentEvents, &recent_events);
+
         EventIngested { event_id, kind: kind.clone() }.publish(&env);
 
         let health = evaluate_health(&metrics, is_paused(&env));
@@ -129,6 +148,23 @@ impl ContractMonitoring {
     pub fn get_health(env: Env) -> HealthSnapshot {
         evaluate_health(&Self::get_metrics(env.clone()), is_paused(&env))
     }
+
+    pub fn get_sliding_window_metrics(env: Env, window_seconds: u64) -> Result<Metrics, Error> {
+        if window_seconds == 0 {
+            return Err(Error::InvalidWindowSize);
+        }
+        let now = env.ledger().timestamp();
+        let start_time = now.saturating_sub(window_seconds);
+        let recent_events: soroban_sdk::Vec<TimedEvent> = env.storage().instance().get(&DataKey::RecentEvents).unwrap_or_else(|| soroban_sdk::Vec::new(&env));
+
+        let mut window_metrics = Metrics::default();
+        for event in recent_events.iter() {
+            if event.timestamp >= start_time {
+                apply_event(&mut window_metrics, &event.kind);
+            }
+        }
+        Ok(window_metrics)
+    }
 }
 
 fn require_admin(env: &Env, admin: &Address) -> Result<(), Error> {
@@ -152,7 +188,7 @@ fn apply_event(metrics: &mut Metrics, kind: &EventKind) {
     match kind {
         EventKind::SettlementSuccess => metrics.settlement_success = metrics.settlement_success.saturating_add(1),
         EventKind::SettlementFailed => metrics.settlement_failed = metrics.settlement_failed.saturating_add(1),
-        EventKind::Error => metrics.error_events = metrics.error_events.saturating_add(1),
+        EventKind::ContractError => metrics.error_events = metrics.error_events.saturating_add(1),
         EventKind::Paused => metrics.paused_events = metrics.paused_events.saturating_add(1),
         EventKind::Resumed => {}
     }
@@ -179,6 +215,7 @@ fn is_high_error_rate(error_events: u64, total_events: u64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use soroban_sdk::testutils::{Address as _, Ledger as _};
 
     #[test]
     fn marks_error_rate_when_threshold_crossed() {
@@ -193,11 +230,84 @@ mod tests {
         let mut metrics = Metrics::default();
         apply_event(&mut metrics, &EventKind::SettlementSuccess);
         apply_event(&mut metrics, &EventKind::SettlementFailed);
-        apply_event(&mut metrics, &EventKind::Error);
+        apply_event(&mut metrics, &EventKind::ContractError);
 
         assert_eq!(metrics.total_events, 3);
         assert_eq!(metrics.settlement_success, 1);
         assert_eq!(metrics.settlement_failed, 1);
         assert_eq!(metrics.error_events, 1);
+    }
+
+    #[test]
+    fn test_sliding_window_metrics() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let contract_id = env.register(ContractMonitoring, ());
+        let client = ContractMonitoringClient::new(&env, &contract_id);
+
+        client.init(&admin);
+
+        // T=100
+        env.ledger().set_timestamp(100);
+        client.ingest_event(&admin, &1, &EventKind::SettlementSuccess);
+
+        // T=200
+        env.ledger().set_timestamp(200);
+        client.ingest_event(&admin, &2, &EventKind::ContractError);
+
+        // T=300
+        env.ledger().set_timestamp(300);
+        client.ingest_event(&admin, &3, &EventKind::SettlementSuccess);
+
+        // Window 150s (T=150 to T=300). Events at 200, 300 included.
+        let m = client.get_sliding_window_metrics(&150);
+        assert_eq!(m.total_events, 2);
+        assert_eq!(m.settlement_success, 1);
+        assert_eq!(m.error_events, 1);
+
+        // Window 50s (T=250 to T=300). Only event at 300 included.
+        let m = client.get_sliding_window_metrics(&50);
+        assert_eq!(m.total_events, 1);
+        assert_eq!(m.settlement_success, 1);
+
+        // Window 1000s. All 3 included.
+        let m = client.get_sliding_window_metrics(&1000);
+        assert_eq!(m.total_events, 3);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #5)")]
+    fn test_sliding_window_invalid_size() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+        let contract_id = env.register(ContractMonitoring, ());
+        let client = ContractMonitoringClient::new(&env, &contract_id);
+
+        env.mock_all_auths();
+        client.init(&admin);
+
+        client.get_sliding_window_metrics(&0);
+    }
+
+    #[test]
+    fn test_sliding_window_cap() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let contract_id = env.register(ContractMonitoring, ());
+        let client = ContractMonitoringClient::new(&env, &contract_id);
+
+        client.init(&admin);
+
+        for i in 0..210 {
+            client.ingest_event(&admin, &(i as u64), &EventKind::SettlementSuccess);
+        }
+
+        let m = client.get_sliding_window_metrics(&86400);
+        // Should be capped at MAX_RECENT_EVENTS (200)
+        assert_eq!(m.total_events, 200);
     }
 }

@@ -83,3 +83,19 @@ pub fn get_health(env: Env) -> HealthSnapshot
 
 `HealthSnapshot`
 
+### `get_sliding_window_metrics`
+```rust
+pub fn get_sliding_window_metrics(env: Env, window_seconds: u64) -> Result<Metrics, Error>
+```
+
+#### Parameters
+
+| Name | Type |
+|------|------|
+| `env` | `Env` |
+| `window_seconds` | `u64` |
+
+#### Return Type
+
+`Result<Metrics, Error>`
+
