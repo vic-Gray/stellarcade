@@ -9,6 +9,7 @@ yarn-error.log*
 
 # Rust
 target/
+**/target-*/
 **/*.rs.bk
 Cargo.lock
 

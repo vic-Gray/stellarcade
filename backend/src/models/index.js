@@ -1,12 +1,15 @@
 /**
  * Centralized model index for managing database interactions.
  */
-const User = require('./User.model');
-const Game = require('./Game.model');
-const Transaction = require('./Transaction.model');
+const UserModel = require('./User.model');
+const GameModel = require('./Game.model');
+const TransactionModel = require('./Transaction.model');
 
 module.exports = {
-  User,
-  Game,
-  Transaction,
+  User: UserModel,
+  Game: GameModel,
+  Transaction: TransactionModel,
+  UserModel,
+  GameModel,
+  TransactionModel
 };
