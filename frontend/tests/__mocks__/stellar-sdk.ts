@@ -4,11 +4,11 @@
  * Provides deterministic, network-free replacements for the SDK primitives
  * used by SorobanContractClient so unit tests never hit a real RPC endpoint.
  *
- * Placed in tests/__mocks__/ and referenced via moduleNameMapper in jest.config.ts.
+ * Placed in tests/__mocks__/ and referenced via moduleNameMapper in vi.config.ts.
  *
  * Usage — in a test file:
  * ```ts
- * jest.mock("@stellar/stellar-sdk", () => require("../__mocks__/stellar-sdk"));
+ * vi.mock("@stellar/stellar-sdk", async () => await import("../__mocks__/stellar-sdk"));
  * ```
  */
 

@@ -4,7 +4,7 @@
  * All network calls are mocked; no real Soroban RPC is contacted.
  */
 
-jest.mock("@stellar/stellar-sdk", () => require("../__mocks__/stellar-sdk"));
+vi.mock("@stellar/stellar-sdk", async () => await import("../__mocks__/stellar-sdk"));
 
 import { SorobanContractClient } from "../../src/services/soroban-contract-client";
 import { ContractAddressRegistry } from "../../src/store/contractAddressRegistry";
@@ -229,7 +229,7 @@ describe("SorobanContractClient — wallet preconditions", () => {
 describe("SorobanContractClient — idempotency key tracking", () => {
   it("emits a console warning on duplicate idempotency key", async () => {
     const client = makeClient();
-    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
     // First call — no warning.
     await client.badge_badgesOf(VALID_STELLAR_ADDR, { idempotencyKey: "key-123" });

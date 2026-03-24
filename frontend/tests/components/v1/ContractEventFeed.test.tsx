@@ -21,16 +21,16 @@ import type { ContractEvent } from '@/types/contracts/events';
 // Mock useContractEvents
 // ---------------------------------------------------------------------------
 
-const mockStart = jest.fn();
-const mockStop = jest.fn();
-const mockClear = jest.fn();
+const mockStart = vi.fn();
+const mockStop = vi.fn();
+const mockClear = vi.fn();
 
 let mockEvents: ContractEvent[] = [];
 let mockIsListening = false;
 let mockError: Error | null = null;
 
-jest.mock('@/hooks/v1/useContractEvents', () => ({
-  useContractEvents: jest.fn(() => ({
+vi.mock('@/hooks/v1/useContractEvents', () => ({
+  useContractEvents: vi.fn(() => ({
     events: mockEvents,
     isListening: mockIsListening,
     error: mockError,
@@ -44,7 +44,7 @@ jest.mock('@/hooks/v1/useContractEvents', () => ({
 // Mock EmptyStateBlock and ErrorNotice to keep tests focused
 // ---------------------------------------------------------------------------
 
-jest.mock('@/components/v1/EmptyStateBlock', () => ({
+vi.mock('@/components/v1/EmptyStateBlock', () => ({
   EmptyStateBlock: ({ title, description, testId }: {
     title?: string; description?: string; testId?: string;
   }) => (
@@ -55,7 +55,7 @@ jest.mock('@/components/v1/EmptyStateBlock', () => ({
   ),
 }));
 
-jest.mock('@/components/v1/ErrorNotice', () => ({
+vi.mock('@/components/v1/ErrorNotice', () => ({
   ErrorNotice: ({ testId, onRetry }: { testId?: string; onRetry?: () => void }) => (
     <div data-testid={testId ?? 'error-notice'}>
       <button onClick={onRetry} data-testid="error-retry">Retry</button>
@@ -286,7 +286,7 @@ describe('ContractEventFeed — interactions', () => {
   it('fires onEventClick when an event row is clicked', () => {
     const event = makeEvent({ id: 'clickable' });
     mockEvents = [event];
-    const handler = jest.fn();
+    const handler = vi.fn();
     renderFeed({ onEventClick: handler });
     fireEvent.click(screen.getByTestId('contract-event-feed-row-clickable'));
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({ id: 'clickable' }));
@@ -295,7 +295,7 @@ describe('ContractEventFeed — interactions', () => {
   it('fires onEventClick via keyboard Enter', () => {
     const event = makeEvent({ id: 'key-enter' });
     mockEvents = [event];
-    const handler = jest.fn();
+    const handler = vi.fn();
     renderFeed({ onEventClick: handler });
     const row = screen.getByTestId('contract-event-feed-row-key-enter');
     fireEvent.keyDown(row, { key: 'Enter' });
@@ -305,7 +305,7 @@ describe('ContractEventFeed — interactions', () => {
   it('fires onEventClick via keyboard Space', () => {
     const event = makeEvent({ id: 'key-space' });
     mockEvents = [event];
-    const handler = jest.fn();
+    const handler = vi.fn();
     renderFeed({ onEventClick: handler });
     const row = screen.getByTestId('contract-event-feed-row-key-space');
     fireEvent.keyDown(row, { key: ' ' });
@@ -320,7 +320,7 @@ describe('ContractEventFeed — interactions', () => {
   });
 
   it('fires onNewEvent for each newly received event', async () => {
-    const onNewEvent = jest.fn();
+    const onNewEvent = vi.fn();
     const event = makeEvent({ id: 'new-one' });
     mockEvents = [event];
     renderFeed({ onNewEvent });
@@ -422,7 +422,7 @@ describe('ContractEventFeed — accessibility', () => {
 
   it('event row is a button role when clickable', () => {
     mockEvents = [makeEvent({ id: 'click-me' })];
-    renderFeed({ onEventClick: jest.fn() });
+    renderFeed({ onEventClick: vi.fn() });
     expect(screen.getByRole('button', { name: /view event click-me/i })).toBeInTheDocument();
   });
 

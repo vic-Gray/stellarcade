@@ -1,0 +1,55 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ContractEventFeed — snapshot > matches stable header snapshot 1`] = `
+<header
+  class="cef__header"
+>
+  <div
+    class="cef__header-left"
+  >
+    <h2
+      class="cef__title"
+    >
+      Contract Events
+    </h2>
+    <span
+      aria-label="Feed status: Live"
+      aria-live="polite"
+      class="cef-status-badge cef-status-badge--connected"
+      data-testid="contract-event-feed-status"
+    >
+      <span
+        aria-hidden="true"
+        class="cef-status-badge__dot"
+      />
+      Live
+    </span>
+  </div>
+  <div
+    class="cef__header-right"
+  >
+    <span
+      aria-atomic="true"
+      aria-live="polite"
+      class="cef__count"
+    />
+    <button
+      aria-label="Pause event feed"
+      class="cef__toggle-btn cef__toggle-btn--pause"
+      data-testid="contract-event-feed-toggle"
+      type="button"
+    >
+      ⏸ Pause
+    </button>
+    <button
+      aria-label="Clear all events"
+      class="cef__clear-btn"
+      data-testid="contract-event-feed-clear"
+      disabled=""
+      type="button"
+    >
+      Clear
+    </button>
+  </div>
+</header>
+`;

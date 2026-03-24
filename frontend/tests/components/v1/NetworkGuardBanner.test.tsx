@@ -156,7 +156,7 @@ describe("NetworkGuardBanner", () => {
 
   describe("Network Switch Action", () => {
     it("should show switch network button when onSwitchNetwork is provided", () => {
-      const mockSwitch = jest.fn<void | Promise<void>, []>();
+      const mockSwitch = vi.fn<void | Promise<void>, []>();
       render(
         <NetworkGuardBanner
           {...mockDefaultProps}
@@ -175,7 +175,7 @@ describe("NetworkGuardBanner", () => {
     });
 
     it("should call onSwitchNetwork when switch button is clicked", async () => {
-      const mockCallback = jest.fn<void, []>() as jest.Mock<
+      const mockCallback = vi.fn<void, []>() as vi.Mock<
         void | Promise<void>,
         []
       >;
@@ -195,7 +195,7 @@ describe("NetworkGuardBanner", () => {
     });
 
     it("should use custom action label", () => {
-      const mockSwitch = jest.fn<void, []>() as jest.Mock<
+      const mockSwitch = vi.fn<void, []>() as vi.Mock<
         void | Promise<void>,
         []
       >;
@@ -213,9 +213,9 @@ describe("NetworkGuardBanner", () => {
     });
 
     it("should show loading state while switching network", async () => {
-      const mockCallback = jest.fn<Promise<void>, []>(
+      const mockCallback = vi.fn<Promise<void>, []>(
         () => new Promise((resolve) => setTimeout(resolve, 100)),
-      ) as jest.Mock<void | Promise<void>, []>;
+      ) as vi.Mock<void | Promise<void>, []>;
       render(
         <NetworkGuardBanner
           {...mockDefaultProps}
@@ -243,9 +243,9 @@ describe("NetworkGuardBanner", () => {
     });
 
     it("should disable switch button while loading", async () => {
-      const mockCallback = jest.fn<Promise<void>, []>(
+      const mockCallback = vi.fn<Promise<void>, []>(
         () => new Promise((resolve) => setTimeout(resolve, 50)),
-      ) as jest.Mock<void | Promise<void>, []>;
+      ) as vi.Mock<void | Promise<void>, []>;
       render(
         <NetworkGuardBanner
           {...mockDefaultProps}
@@ -264,10 +264,10 @@ describe("NetworkGuardBanner", () => {
     });
 
     it("should handle errors in onSwitchNetwork gracefully", async () => {
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
-      const mockCallback = jest.fn(() =>
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation();
+      const mockCallback = vi.fn(() =>
         Promise.reject(new Error("Network switch failed")),
-      ) as jest.Mock<void | Promise<void>, []>;
+      ) as vi.Mock<void | Promise<void>, []>;
 
       render(
         <NetworkGuardBanner
@@ -288,7 +288,7 @@ describe("NetworkGuardBanner", () => {
     });
 
     it("should handle synchronous onSwitchNetwork callbacks", async () => {
-      const mockCallback = jest.fn<void, []>() as jest.Mock<
+      const mockCallback = vi.fn<void, []>() as vi.Mock<
         void | Promise<void>,
         []
       >;
@@ -459,7 +459,7 @@ describe("NetworkGuardBanner", () => {
 
   describe("Combination Scenarios", () => {
     it("should handle switch + dismiss together", async () => {
-      const mockSwitch = jest.fn<void | Promise<void>, []>();
+      const mockSwitch = vi.fn<void | Promise<void>, []>();
       render(
         <NetworkGuardBanner
           {...mockDefaultProps}
@@ -505,7 +505,7 @@ describe("NetworkGuardBanner", () => {
 
   describe("Accessibility", () => {
     it("should have proper ARIA attributes", () => {
-      const mockSwitch = jest.fn<void | Promise<void>, []>();
+      const mockSwitch = vi.fn<void | Promise<void>, []>();
       render(
         <NetworkGuardBanner
           {...mockDefaultProps}
@@ -523,9 +523,9 @@ describe("NetworkGuardBanner", () => {
     });
 
     it("should set aria-busy on switch button during loading", async () => {
-      const mockCallback = jest.fn<Promise<void>, []>(
+      const mockCallback = vi.fn<Promise<void>, []>(
         () => new Promise((resolve) => setTimeout(resolve, 50)),
-      ) as jest.Mock<void | Promise<void>, []>;
+      ) as vi.Mock<void | Promise<void>, []>;
       render(
         <NetworkGuardBanner
           {...mockDefaultProps}

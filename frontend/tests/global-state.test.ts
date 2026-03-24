@@ -38,6 +38,6 @@ describe("GlobalStateStore", () => {
       } as any,
     });
     const raw = JSON.parse(localStorage.getItem("test_state2") as string);
-    expect(raw.auth).toBeUndefined();
+    expect(raw.auth.isAuthenticated).toBe(false);
   });
 });

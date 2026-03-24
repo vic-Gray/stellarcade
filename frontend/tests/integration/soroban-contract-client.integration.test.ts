@@ -6,7 +6,7 @@
  * made.
  */
 
-jest.mock("@stellar/stellar-sdk", () => require("../__mocks__/stellar-sdk"));
+vi.mock("@stellar/stellar-sdk", async () => await import("../__mocks__/stellar-sdk"));
 
 import { SorobanContractClient } from "../../src/services/soroban-contract-client";
 import { ContractAddressRegistry } from "../../src/store/contractAddressRegistry";
@@ -234,7 +234,7 @@ describe("Failure paths", () => {
 
   it("propagates validation failure without making RPC calls", async () => {
     const wallet = new MockWalletProvider();
-    const isConnectedSpy = jest.spyOn(wallet, "isConnected");
+    const isConnectedSpy = vi.spyOn(wallet, "isConnected");
     const client = makeClient(wallet);
 
     // Invalid param — should short-circuit before wallet check.

@@ -118,7 +118,7 @@ describe('EmptyStateBlock', () => {
     });
 
     it('should render single action button', () => {
-      const handleClick = jest.fn();
+      const handleClick = vi.fn();
       render(
         <EmptyStateBlock
           variant="list"
@@ -129,8 +129,8 @@ describe('EmptyStateBlock', () => {
     });
 
     it('should render multiple action buttons', () => {
-      const handleClick1 = jest.fn();
-      const handleClick2 = jest.fn();
+      const handleClick1 = vi.fn();
+      const handleClick2 = vi.fn();
       render(
         <EmptyStateBlock
           variant="list"
@@ -145,7 +145,7 @@ describe('EmptyStateBlock', () => {
     });
 
     it('should call onClick handler when action button is clicked', () => {
-      const handleClick = jest.fn();
+      const handleClick = vi.fn();
       render(
         <EmptyStateBlock
           variant="list"
@@ -157,7 +157,7 @@ describe('EmptyStateBlock', () => {
     });
 
     it('should handle async onClick handlers', async () => {
-      const handleClick = jest.fn().mockResolvedValue(undefined);
+      const handleClick = vi.fn().mockResolvedValue(undefined);
       render(
         <EmptyStateBlock
           variant="list"
@@ -169,7 +169,7 @@ describe('EmptyStateBlock', () => {
     });
 
     it('should apply primary variant class to primary buttons', () => {
-      const handleClick = jest.fn();
+      const handleClick = vi.fn();
       const { container } = render(
         <EmptyStateBlock
           variant="list"
@@ -181,7 +181,7 @@ describe('EmptyStateBlock', () => {
     });
 
     it('should apply secondary variant class to secondary buttons', () => {
-      const handleClick = jest.fn();
+      const handleClick = vi.fn();
       const { container } = render(
         <EmptyStateBlock
           variant="list"
@@ -193,7 +193,7 @@ describe('EmptyStateBlock', () => {
     });
 
     it('should default to secondary variant when not specified', () => {
-      const handleClick = jest.fn();
+      const handleClick = vi.fn();
       const { container } = render(
         <EmptyStateBlock
           variant="list"
@@ -205,7 +205,7 @@ describe('EmptyStateBlock', () => {
     });
 
     it('should disable button when disabled prop is true', () => {
-      const handleClick = jest.fn();
+      const handleClick = vi.fn();
       render(
         <EmptyStateBlock
           variant="list"
@@ -217,7 +217,7 @@ describe('EmptyStateBlock', () => {
     });
 
     it('should not call onClick when button is disabled', () => {
-      const handleClick = jest.fn();
+      const handleClick = vi.fn();
       render(
         <EmptyStateBlock
           variant="list"
@@ -254,11 +254,11 @@ describe('EmptyStateBlock', () => {
       expect(screen.getByText('Please connect your wallet')).toBeInTheDocument();
     });
 
-    it('should render error with FATAL severity', () => {
+    it('should render error with TERMINAL severity', () => {
       const error: AppError = {
         code: 'CONTRACT_NOT_INITIALIZED',
         domain: ErrorDomain.CONTRACT,
-        severity: ErrorSeverity.FATAL,
+        severity: ErrorSeverity.TERMINAL,
         message: 'Contract not initialized',
       };
       render(<EmptyStateBlock error={error} />);
@@ -315,8 +315,8 @@ describe('EmptyStateBlock', () => {
     });
 
     it('should filter out actions with invalid callbacks', () => {
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-      const validAction = { label: 'Valid', onClick: jest.fn() };
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation();
+      const validAction = { label: 'Valid', onClick: vi.fn() };
       const invalidAction = { label: 'Invalid', onClick: 'not a function' as any };
       
       render(
@@ -334,9 +334,9 @@ describe('EmptyStateBlock', () => {
     });
 
     it('should filter out actions with missing labels', () => {
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-      const validAction = { label: 'Valid', onClick: jest.fn() };
-      const invalidAction = { label: '', onClick: jest.fn() };
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation();
+      const validAction = { label: 'Valid', onClick: vi.fn() };
+      const invalidAction = { label: '', onClick: vi.fn() };
       
       render(
         <EmptyStateBlock
@@ -352,8 +352,8 @@ describe('EmptyStateBlock', () => {
     });
 
     it('should not crash when action callback throws error', () => {
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-      const handleClick = jest.fn(() => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation();
+      const handleClick = vi.fn(() => {
         throw new Error('Action error');
       });
       
@@ -402,7 +402,7 @@ describe('EmptyStateBlock', () => {
       render(
         <EmptyStateBlock
           variant="list"
-          actions={[{ label: 'Action', onClick: jest.fn() }]}
+          actions={[{ label: 'Action', onClick: vi.fn() }]}
         />
       );
       const button = screen.getByRole('button', { name: 'Action' });

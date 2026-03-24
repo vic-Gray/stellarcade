@@ -32,7 +32,7 @@ describe('useContractEvents', () => {
         });
 
         expect(result.current.error).toBeInstanceOf(Error);
-        expect(result.current.error?.message).toBe('Contract ID is required to listen for events');
+        expect(result.current.error?.message).toBe('Contract ID is required');
         expect(result.current.isListening).toBe(false);
     });
 

@@ -122,11 +122,11 @@ export function getErrorConfig(error: AppError): Partial<VariantConfig> {
   const severityIcons: Record<string, string> = {
     [ErrorSeverity.RETRYABLE]: '🔄',
     [ErrorSeverity.USER_ACTIONABLE]: '⚠️',
-    [ErrorSeverity.FATAL]: '❌',
+    [(ErrorSeverity as any).TERMINAL]: "❌",
   };
-  
+
   return {
-    icon: severityIcons[error.severity] || '⚠️',
+    icon: severityIcons[error.severity] || "⚠️",
     title: getErrorTitle(error),
     description: error.message,
   };
@@ -134,26 +134,26 @@ export function getErrorConfig(error: AppError): Partial<VariantConfig> {
 
 /**
  * Generate a user-friendly title from an AppError object.
- * 
+ *
  * Provides context-appropriate titles based on error domain and severity.
- * 
+ *
  * @param error - AppError object
  * @returns User-friendly error title
  */
 export function getErrorTitle(error: AppError): string {
   // For retryable errors, emphasize that it's temporary
   if (error.severity === ErrorSeverity.RETRYABLE) {
-    return 'Temporary Issue';
+    return "Temporary Issue";
   }
-  
+
   // For user-actionable errors, emphasize that user can fix it
   if (error.severity === ErrorSeverity.USER_ACTIONABLE) {
-    return 'Action Required';
+    return "Action Required";
   }
-  
+
   // For fatal errors, be clear but not alarming
-  if (error.severity === ErrorSeverity.FATAL) {
-    return 'Unable to Complete';
+  if (error.severity === ErrorSeverity.TERMINAL) {
+    return "Unable to Complete";
   }
   
   // Fallback

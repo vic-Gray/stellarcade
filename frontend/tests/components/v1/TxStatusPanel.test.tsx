@@ -5,7 +5,7 @@ import { TxStatusPanel } from '../../../src/components/v1/TxStatusPanel';
 import { TxPhase } from '../../../src/types/tx-status';
 
 describe('TxStatusPanel', () => {
-    const mockHash = 'GABC1234567890XYZ1234567890ABCDEF1234567890XYZ1234567';
+    const mockHash = 'GABCDEFGHJKLMNPQRSTUVWXYZ234567GABCDEFGHJKLMNPQRSTUVW';
     const mockMeta = {
         hash: mockHash,
         phase: TxPhase.SUBMITTED,
@@ -23,7 +23,7 @@ describe('TxStatusPanel', () => {
         render(<TxStatusPanel phase={TxPhase.SUBMITTED} meta={mockMeta} />);
         expect(screen.getByTestId('tx-status-panel-badge')).toHaveTextContent('SUBMITTED');
         expect(screen.getByTestId('tx-status-panel-timeline')).toBeInTheDocument();
-        expect(screen.getByText(/GABC1234/)).toBeInTheDocument();
+        expect(screen.getByText(/GABCDEFG/)).toBeInTheDocument();
     });
 
     it('renders error block in FAILED state', () => {
@@ -48,7 +48,7 @@ describe('TxStatusPanel', () => {
     });
 
     it('triggers explorer callback when clicked', () => {
-        const onExplorerLink = jest.fn();
+        const onExplorerLink = vi.fn();
         render(
             <TxStatusPanel
                 phase={TxPhase.CONFIRMED}

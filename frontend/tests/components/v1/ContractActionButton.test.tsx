@@ -4,8 +4,8 @@ import { ContractActionButton } from '../../../src/components/v1/ContractActionB
 
 describe('ContractActionButton', () => {
   it('runs action and calls onSuccess', async () => {
-    const action = jest.fn().mockResolvedValue({ tx: 'abc' });
-    const onSuccess = jest.fn();
+    const action = vi.fn().mockResolvedValue({ tx: 'abc' });
+    const onSuccess = vi.fn();
 
     render(
       <ContractActionButton
@@ -24,7 +24,7 @@ describe('ContractActionButton', () => {
   });
 
   it('blocks when wallet is not connected', () => {
-    const action = jest.fn().mockResolvedValue({});
+    const action = vi.fn().mockResolvedValue({});
 
     render(
       <ContractActionButton
@@ -41,7 +41,7 @@ describe('ContractActionButton', () => {
 
   it('blocks duplicate triggers while in-flight', async () => {
     let resolveAction: (() => void) | undefined;
-    const action = jest.fn().mockImplementation(
+    const action = vi.fn().mockImplementation(
       () =>
         new Promise<void>((resolve) => {
           resolveAction = resolve;
@@ -67,8 +67,8 @@ describe('ContractActionButton', () => {
   });
 
   it('maps failures and calls onError', async () => {
-    const action = jest.fn().mockRejectedValue(new Error('contract failed'));
-    const onError = jest.fn();
+    const action = vi.fn().mockRejectedValue(new Error('contract failed'));
+    const onError = vi.fn();
 
     render(
       <ContractActionButton

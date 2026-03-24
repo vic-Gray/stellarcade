@@ -104,6 +104,7 @@ describe("WalletSessionService", () => {
       supportedNetworks: ["TESTNET"],
       sessionExpiryMs: 1,
     });
+    svc2.setProviderAdapter(adapter as any);
     await expect(svc2.reconnect()).rejects.toBeInstanceOf(StaleSessionError);
   });
 });

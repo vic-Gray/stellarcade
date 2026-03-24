@@ -24,7 +24,7 @@ describe('CoinFlipResultCard', () => {
     });
 
     it('renders retry button and triggers callback', () => {
-        const handleRetry = jest.fn();
+        const handleRetry = vi.fn();
         const error = new Error('Retry me');
         render(<CoinFlipResultCard error={error} onRetry={handleRetry} />);
 
@@ -47,7 +47,7 @@ describe('CoinFlipResultCard', () => {
     });
 
     it('renders resolve button for pending game when onResolve is provided', () => {
-        const handleResolve = jest.fn();
+        const handleResolve = vi.fn();
         render(<CoinFlipResultCard game={mockGame} onResolve={handleResolve} />);
 
         const resolveBtn = screen.getByRole('button', { name: /resolve game/i });

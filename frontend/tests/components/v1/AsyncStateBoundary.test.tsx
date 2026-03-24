@@ -15,7 +15,7 @@ describe('AsyncStateBoundary', () => {
   });
 
   it('renders error branch and calls retry', () => {
-    const onRetry = jest.fn();
+    const onRetry = vi.fn();
 
     render(
       <AsyncStateBoundary

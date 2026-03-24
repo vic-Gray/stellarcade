@@ -4,9 +4,9 @@ import { ActionToolbar, ToolbarAction } from '../../../src/components/v1/ActionT
 
 describe('ActionToolbar', () => {
     const mockActions: ToolbarAction[] = [
-        { id: '1', label: 'Primary', onClick: jest.fn(), intent: 'primary' },
-        { id: '2', label: 'Secondary', onClick: jest.fn(), intent: 'secondary' },
-        { id: '3', label: 'Tertiary', onClick: jest.fn(), intent: 'tertiary' },
+        { id: '1', label: 'Primary', onClick: vi.fn(), intent: 'primary' },
+        { id: '2', label: 'Secondary', onClick: vi.fn(), intent: 'secondary' },
+        { id: '3', label: 'Tertiary', onClick: vi.fn(), intent: 'tertiary' },
     ];
 
     it('renders all actions with correct labels', () => {
@@ -24,7 +24,7 @@ describe('ActionToolbar', () => {
 
     it('does not trigger onClick when an action is disabled', () => {
         const disabledAction: ToolbarAction = {
-            id: '4', label: 'Disabled', onClick: jest.fn(), isDisabled: true
+            id: '4', label: 'Disabled', onClick: vi.fn(), isDisabled: true
         };
         render(<ActionToolbar actions={[disabledAction]} />);
 
@@ -36,7 +36,7 @@ describe('ActionToolbar', () => {
 
     it('renders loading state and disables interaction', () => {
         const loadingAction: ToolbarAction = {
-            id: '5', label: 'Loading', onClick: jest.fn(), isLoading: true
+            id: '5', label: 'Loading', onClick: vi.fn(), isLoading: true
         };
         render(<ActionToolbar actions={[loadingAction]} />);
 
@@ -81,7 +81,7 @@ describe('ActionToolbar', () => {
 
     it('renders icons when provided', () => {
         const actionWithIcon: ToolbarAction = {
-            id: '6', label: 'Icon', onClick: jest.fn(), icon: <span data-testid="test-icon">🚀</span>
+            id: '6', label: 'Icon', onClick: vi.fn(), icon: <span data-testid="test-icon">🚀</span>
         };
         render(<ActionToolbar actions={[actionWithIcon]} />);
         expect(screen.getByTestId('test-icon')).toBeInTheDocument();

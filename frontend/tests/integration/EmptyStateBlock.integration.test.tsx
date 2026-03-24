@@ -11,7 +11,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { EmptyStateBlock } from '../../src/components/v1/EmptyStateBlock';
-import { toAppError, mapApiError, mapWalletError } from '../../src/services/error-mapping';
+import { toAppError, mapApiError, mapWalletError } from '../../src/utils/v1/errorMapper';
 import { ErrorDomain, ErrorSeverity } from '../../src/types/errors';
 
 describe('EmptyStateBlock Integration Tests', () => {
@@ -63,7 +63,7 @@ describe('EmptyStateBlock Integration Tests', () => {
         retryAfterMs: 1000,
       };
 
-      const handleRetry = jest.fn();
+      const handleRetry = vi.fn();
       
       render(
         <EmptyStateBlock
@@ -86,7 +86,7 @@ describe('EmptyStateBlock Integration Tests', () => {
 
   describe('Real-world Usage Scenarios', () => {
     it('should work in a game library empty state', () => {
-      const handleBrowseGames = jest.fn();
+      const handleBrowseGames = vi.fn();
       
       render(
         <EmptyStateBlock
@@ -111,8 +111,8 @@ describe('EmptyStateBlock Integration Tests', () => {
     });
 
     it('should work in a search results empty state', () => {
-      const handleClearFilters = jest.fn();
-      const handleResetSearch = jest.fn();
+      const handleClearFilters = vi.fn();
+      const handleResetSearch = vi.fn();
       
       render(
         <EmptyStateBlock
@@ -143,7 +143,7 @@ describe('EmptyStateBlock Integration Tests', () => {
     });
 
     it('should work in a transaction history empty state', () => {
-      const handlePlayGame = jest.fn();
+      const handlePlayGame = vi.fn();
       
       render(
         <EmptyStateBlock
@@ -168,7 +168,7 @@ describe('EmptyStateBlock Integration Tests', () => {
 
     it('should work in a network error scenario with retry', async () => {
       let attemptCount = 0;
-      const mockFetch = jest.fn(async () => {
+      const mockFetch = vi.fn(async () => {
         attemptCount++;
         if (attemptCount < 2) {
           throw new Error('Network error');

@@ -84,7 +84,7 @@ describe('EmptyStateBlock Utilities', () => {
 
   describe('safeCallback', () => {
     it('should execute callback successfully', async () => {
-      const callback = jest.fn();
+      const callback = vi.fn();
       const safe = safeCallback(callback, 'test');
       
       await safe();
@@ -93,7 +93,7 @@ describe('EmptyStateBlock Utilities', () => {
     });
 
     it('should handle async callbacks', async () => {
-      const callback = jest.fn().mockResolvedValue('result');
+      const callback = vi.fn().mockResolvedValue('result');
       const safe = safeCallback(callback, 'test');
       
       await safe();
@@ -102,8 +102,8 @@ describe('EmptyStateBlock Utilities', () => {
     });
 
     it('should catch and log errors without throwing', async () => {
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-      const callback = jest.fn(() => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation();
+      const callback = vi.fn(() => {
         throw new Error('Test error');
       });
       const safe = safeCallback(callback, 'test-action');
@@ -119,8 +119,8 @@ describe('EmptyStateBlock Utilities', () => {
     });
 
     it('should catch async errors without throwing', async () => {
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-      const callback = jest.fn().mockRejectedValue(new Error('Async error'));
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation();
+      const callback = vi.fn().mockRejectedValue(new Error('Async error'));
       const safe = safeCallback(callback, 'async-action');
       
       await expect(safe()).resolves.not.toThrow();
@@ -192,11 +192,11 @@ describe('EmptyStateBlock Utilities', () => {
       expect(config.description).toBe('Connect wallet');
     });
 
-    it('should return config for FATAL error', () => {
+    it('should return config for TERMINAL error', () => {
       const error: AppError = {
         code: 'CONTRACT_NOT_INITIALIZED',
         domain: ErrorDomain.CONTRACT,
-        severity: ErrorSeverity.FATAL,
+        severity: ErrorSeverity.TERMINAL,
         message: 'Contract error',
       };
       
@@ -244,11 +244,11 @@ describe('EmptyStateBlock Utilities', () => {
       expect(getErrorTitle(error)).toBe('Action Required');
     });
 
-    it('should return "Unable to Complete" for FATAL', () => {
+    it('should return "Unable to Complete" for TERMINAL', () => {
       const error: AppError = {
         code: 'CONTRACT_NOT_INITIALIZED',
         domain: ErrorDomain.CONTRACT,
-        severity: ErrorSeverity.FATAL,
+        severity: ErrorSeverity.TERMINAL,
         message: 'Error',
       };
       
@@ -401,8 +401,8 @@ describe('EmptyStateBlock Utilities', () => {
 
     it('should return valid actions', () => {
       const actions = [
-        { label: 'Action 1', onClick: jest.fn() },
-        { label: 'Action 2', onClick: jest.fn() },
+        { label: 'Action 1', onClick: vi.fn() },
+        { label: 'Action 2', onClick: vi.fn() },
       ];
       
       const result = validateActions(actions);
@@ -413,10 +413,10 @@ describe('EmptyStateBlock Utilities', () => {
     });
 
     it('should filter out actions with missing label', () => {
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation();
       const actions = [
-        { label: 'Valid', onClick: jest.fn() },
-        { label: '', onClick: jest.fn() },
+        { label: 'Valid', onClick: vi.fn() },
+        { label: '', onClick: vi.fn() },
       ];
       
       const result = validateActions(actions as any);
@@ -429,9 +429,9 @@ describe('EmptyStateBlock Utilities', () => {
     });
 
     it('should filter out actions with invalid onClick', () => {
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation();
       const actions = [
-        { label: 'Valid', onClick: jest.fn() },
+        { label: 'Valid', onClick: vi.fn() },
         { label: 'Invalid', onClick: 'not a function' as any },
       ];
       
@@ -445,9 +445,9 @@ describe('EmptyStateBlock Utilities', () => {
     });
 
     it('should filter out actions with null onClick', () => {
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation();
       const actions = [
-        { label: 'Valid', onClick: jest.fn() },
+        { label: 'Valid', onClick: vi.fn() },
         { label: 'Invalid', onClick: null as any },
       ];
       
@@ -463,7 +463,7 @@ describe('EmptyStateBlock Utilities', () => {
       const actions = [
         {
           label: 'Action',
-          onClick: jest.fn(),
+          onClick: vi.fn(),
           variant: 'primary' as const,
           disabled: true,
         },

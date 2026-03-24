@@ -38,7 +38,7 @@ describe("ErrorNotice", () => {
       message: "Network error",
     };
 
-    const onRetry = jest.fn();
+    const onRetry = vi.fn();
     render(<ErrorNotice error={error} onRetry={onRetry} />);
 
     const retryButton = screen.getByTestId("error-notice-retry");
@@ -54,7 +54,7 @@ describe("ErrorNotice", () => {
       message: "Network error",
     };
 
-    const onRetry = jest.fn();
+    const onRetry = vi.fn();
     render(<ErrorNotice error={error} onRetry={onRetry} />);
 
     const retryButton = screen.getByTestId("error-notice-retry");
@@ -71,7 +71,7 @@ describe("ErrorNotice", () => {
       message: "Validation error",
     };
 
-    const onDismiss = jest.fn();
+    const onDismiss = vi.fn();
     render(<ErrorNotice error={error} onDismiss={onDismiss} />);
 
     const dismissButton = screen.getByTestId("error-notice-dismiss");
@@ -87,7 +87,7 @@ describe("ErrorNotice", () => {
       message: "Validation error",
     };
 
-    const onDismiss = jest.fn();
+    const onDismiss = vi.fn();
     render(<ErrorNotice error={error} onDismiss={onDismiss} />);
 
     const dismissButton = screen.getByTestId("error-notice-dismiss");

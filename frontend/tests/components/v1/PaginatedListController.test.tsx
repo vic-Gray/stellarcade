@@ -9,14 +9,14 @@ describe('PaginatedListController', () => {
         pageSize: 10,
         total: 100,
         totalPages: 10,
-        onNext: jest.fn(),
-        onPrev: jest.fn(),
-        onPageChange: jest.fn(),
-        onPageSizeChange: jest.fn(),
+        onNext: vi.fn(),
+        onPrev: vi.fn(),
+        onPageChange: vi.fn(),
+        onPageSizeChange: vi.fn(),
     };
 
     beforeEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
     });
 
     it('renders correctly with default props', () => {
