@@ -103,6 +103,23 @@ pub fn payout(env: Env, admin: Address, to: Address, game_id: u64, amount: i128)
 
 `Result<(), Error>`
 
+### `get_pool_state`
+Returns a point-in-time snapshot of the pool's accounting state.
+
+```rust
+pub fn get_pool_state(env: Env) -> Result<PoolState, Error>
+```
+
+#### Parameters
+
+| Name | Type |
+|------|------|
+| `env` | `Env` |
+
+#### Return Type
+
+`Result<PoolState, Error>`
+
 ### `get_prize_pool_metrics`
 Returns a detailed snapshot of the pool's metrics, including cumulative payout counts and last sequence markers.
 
@@ -119,22 +136,4 @@ pub fn get_prize_pool_metrics(env: Env) -> Result<PrizePoolMetrics, Error>
 #### Return Type
 
 `Result<PrizePoolMetrics, Error>`
-
-## Data Structures
-
-### `PoolState`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `available` | `i128` | Tokens free to be earmarked for new games. |
-| `reserved` | `i128` | Tokens currently earmarked across all active reservations. |
-
-### `PrizePoolMetrics`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `available_balance` | `i128` | Currently liquid tokens available for reservation. |
-| `reserved_amount` | `i128` | Sum of all active, unconsumed reservations. |
-| `payouts_count` | `u64` | Lifetime count of successful payout transfers. |
-| `last_update_ledger` | `u32` | Ledger index of the most recent state change. |
 
