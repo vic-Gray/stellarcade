@@ -25,6 +25,18 @@ pub struct VestingSchedule {
 }
 
 #[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VestingSummary {
+    pub total_allocation: i128,
+    pub claimed_amount: i128,
+    pub claimable_amount: i128,
+    pub remaining_amount: i128,
+    pub current_timestamp: u64,
+    pub is_fully_vested: bool,
+    pub has_active_schedules: bool,
+}
+
+#[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
     Admin,
@@ -272,6 +284,60 @@ impl RewardVestingContract {
         result
     }
 
+    /// Return a vesting summary for `user` with allocation, claimed, claimable, and remaining amounts.
+    /// Returns empty summary with zero values if user has no vesting schedules.
+    pub fn get_vesting_summary(env: Env, user: Address) -> VestingSummary {
+        let user_key = DataKey::UserSchedules(user.clone());
+        let ids: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&user_key)
+            .unwrap_or(Vec::new(&env));
+
+        let map: Map<u64, VestingSchedule> = env
+            .storage()
+            .instance()
+            .get(&DataKey::ScheduleMap)
+            .unwrap_or(Map::new(&env));
+
+        let now = env.ledger().timestamp();
+        let mut total_allocation = 0i128;
+        let mut claimed_amount = 0i128;
+        let mut claimable_amount = 0i128;
+        let mut has_active_schedules = false;
+
+        for id in ids.iter() {
+            if let Some(schedule) = map.get(id) {
+                if !schedule.revoked {
+                    total_allocation += schedule.amount;
+                    claimed_amount += schedule.claimed;
+                    
+                    let vested = Self::vested_amount(&schedule, now);
+                    let schedule_claimable = vested.saturating_sub(schedule.claimed).max(0);
+                    claimable_amount += schedule_claimable;
+                    
+                    // Check if schedule is still active (not fully vested)
+                    if vested < schedule.amount {
+                        has_active_schedules = true;
+                    }
+                }
+            }
+        }
+
+        let remaining_amount = total_allocation.saturating_sub(claimed_amount);
+        let is_fully_vested = !has_active_schedules && total_allocation > 0;
+
+        VestingSummary {
+            total_allocation,
+            claimed_amount,
+            claimable_amount,
+            remaining_amount,
+            current_timestamp: now,
+            is_fully_vested,
+            has_active_schedules,
+        }
+    }
+
     // ── Internal ──────────────────────────────────────────────────────────────
 
     fn vested_amount(schedule: &VestingSchedule, now: u64) -> i128 {
@@ -440,5 +506,142 @@ mod tests {
         let id1 = client.create_vesting_schedule(&user, &200, &now, &0, &10);
         assert_eq!(id0, 0);
         assert_eq!(id1, 1);
+    }
+
+    #[test]
+    fn test_vesting_summary_empty_user() {
+        let (env, client, _admin, _tc) = setup();
+        let user = Address::generate(&env);
+        let summary = client.get_vesting_summary(&user);
+        
+        assert_eq!(summary.total_allocation, 0);
+        assert_eq!(summary.claimed_amount, 0);
+        assert_eq!(summary.claimable_amount, 0);
+        assert_eq!(summary.remaining_amount, 0);
+        assert!(!summary.is_fully_vested);
+        assert!(!summary.has_active_schedules);
+    }
+
+    #[test]
+    fn test_vesting_summary_pre_vesting() {
+        let (env, client, _admin, _tc) = setup();
+        let user = Address::generate(&env);
+        let now = env.ledger().timestamp();
+        let amount = 10_000i128;
+        
+        client.create_vesting_schedule(&user, &amount, &now, &3600, &7200);
+        let summary = client.get_vesting_summary(&user);
+        
+        assert_eq!(summary.total_allocation, amount);
+        assert_eq!(summary.claimed_amount, 0);
+        assert_eq!(summary.claimable_amount, 0);
+        assert_eq!(summary.remaining_amount, amount);
+        assert!(!summary.is_fully_vested);
+        assert!(summary.has_active_schedules);
+    }
+
+    #[test]
+    fn test_vesting_summary_mid_vesting() {
+        let (env, client, _admin, _tc) = setup();
+        let user = Address::generate(&env);
+        let start = env.ledger().timestamp();
+        let amount = 10_000i128;
+        
+        client.create_vesting_schedule(&user, &amount, &start, &0, &1000);
+        env.ledger().with_mut(|l| l.timestamp = start + 500);
+        
+        let summary = client.get_vesting_summary(&user);
+        
+        assert_eq!(summary.total_allocation, amount);
+        assert_eq!(summary.claimed_amount, 0);
+        assert_eq!(summary.claimable_amount, 5_000);
+        assert_eq!(summary.remaining_amount, amount);
+        assert!(!summary.is_fully_vested);
+        assert!(summary.has_active_schedules);
+    }
+
+    #[test]
+    fn test_vesting_summary_fully_vested() {
+        let (env, client, _admin, _tc) = setup();
+        let user = Address::generate(&env);
+        let start = env.ledger().timestamp();
+        let amount = 10_000i128;
+        
+        client.create_vesting_schedule(&user, &amount, &start, &0, &1000);
+        env.ledger().with_mut(|l| l.timestamp = start + 2000);
+        
+        let summary = client.get_vesting_summary(&user);
+        
+        assert_eq!(summary.total_allocation, amount);
+        assert_eq!(summary.claimed_amount, 0);
+        assert_eq!(summary.claimable_amount, amount);
+        assert_eq!(summary.remaining_amount, amount);
+        assert!(summary.is_fully_vested);
+        assert!(!summary.has_active_schedules);
+    }
+
+    #[test]
+    fn test_vesting_summary_partial_claim() {
+        let (env, client, _admin, _tc) = setup();
+        let user = Address::generate(&env);
+        let start = env.ledger().timestamp();
+        let amount = 10_000i128;
+        
+        client.create_vesting_schedule(&user, &amount, &start, &0, &1000);
+        env.ledger().with_mut(|l| l.timestamp = start + 500);
+        
+        let claimed = client.claim_vested(&user);
+        assert_eq!(claimed, 5_000);
+        
+        let summary = client.get_vesting_summary(&user);
+        
+        assert_eq!(summary.total_allocation, amount);
+        assert_eq!(summary.claimed_amount, 5_000);
+        assert_eq!(summary.claimable_amount, 0);
+        assert_eq!(summary.remaining_amount, 5_000);
+        assert!(!summary.is_fully_vested);
+        assert!(summary.has_active_schedules);
+    }
+
+    #[test]
+    fn test_vesting_summary_revoked_schedule() {
+        let (env, client, _admin, _tc) = setup();
+        let user = Address::generate(&env);
+        let start = env.ledger().timestamp();
+        let amount = 10_000i128;
+        
+        let id = client.create_vesting_schedule(&user, &amount, &start, &0, &1000);
+        client.revoke_schedule(&id);
+        
+        let summary = client.get_vesting_summary(&user);
+        
+        assert_eq!(summary.total_allocation, 0);
+        assert_eq!(summary.claimed_amount, 0);
+        assert_eq!(summary.claimable_amount, 0);
+        assert_eq!(summary.remaining_amount, 0);
+        assert!(!summary.is_fully_vested);
+        assert!(!summary.has_active_schedules);
+    }
+
+    #[test]
+    fn test_vesting_summary_multiple_schedules() {
+        let (env, client, _admin, _tc) = setup();
+        let user = Address::generate(&env);
+        let start = env.ledger().timestamp();
+        let amount1 = 5_000i128;
+        let amount2 = 10_000i128;
+        
+        client.create_vesting_schedule(&user, &amount1, &start, &0, &1000);
+        client.create_vesting_schedule(&user, &amount2, &start, &3600, &7200);
+        env.ledger().with_mut(|l| l.timestamp = start + 500);
+        
+        let summary = client.get_vesting_summary(&user);
+        
+        assert_eq!(summary.total_allocation, amount1 + amount2);
+        assert_eq!(summary.claimed_amount, 0);
+        assert_eq!(summary.claimable_amount, 2_500); // Only first schedule has vested
+        assert_eq!(summary.remaining_amount, amount1 + amount2);
+        assert!(!summary.is_fully_vested);
+        assert!(summary.has_active_schedules);
     }
 }
