@@ -16,8 +16,12 @@ const db = knex({
 db.raw('SELECT 1')
   .then(() => logger.info('PostgreSQL connected successfully'))
   .catch((err) => {
-    logger.error('PostgreSQL connection failed:', err);
-    process.exit(1);
+    if (process.env.NODE_ENV !== 'test') {
+      logger.error('PostgreSQL connection failed:', err);
+      process.exit(1);
+    } else {
+      logger.warn('PostgreSQL connection failed in test mode:', err);
+    }
   });
 
 module.exports = db;

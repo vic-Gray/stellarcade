@@ -4,6 +4,7 @@
 const StellarSdk = require('@stellar/stellar-sdk');
 const logger = require('../utils/logger');
 const { server, passphrase } = require('../config/stellar');
+const Outbox = require('../models/Outbox.model');
 
 /**
  * Error codes returned in the service result for structured error handling by callers.
@@ -155,8 +156,60 @@ const submitTransaction = async (transactionXDR) => {
   }
 };
 
+/**
+ * Add a transaction to the outbox for deferred processing.
+ * This provides idempotent retry semantics and observability.
+ *
+ * @param {string} transactionXDR - Base64-encoded TransactionEnvelope XDR string.
+ * @returns {Promise<{
+ *   status: 'queued'|'error',
+ *   outboxId: string|null,
+ *   errorCode: string|null,
+ *   errorMessage: string|null,
+ * }>}
+ */
+const submitTransactionAsync = async (transactionXDR) => {
+  // Validate XDR before adding to outbox
+  let _transaction;
+  try {
+    _transaction = StellarSdk.TransactionBuilder.fromXDR(transactionXDR, passphrase);
+  } catch (parseErr) {
+    logger.warn('Invalid transaction XDR supplied for async submission:', parseErr.message);
+    return {
+      status: 'error',
+      outboxId: null,
+      errorCode: STELLAR_ERRORS.INVALID_XDR,
+      errorMessage: `Invalid XDR: ${parseErr.message}`,
+    };
+  }
+
+  try {
+    const outbox = await Outbox.create({
+      transaction_xdr: transactionXDR,
+    });
+
+    logger.info(`Transaction queued for deferred processing. outboxId=${outbox.id}`);
+
+    return {
+      status: 'queued',
+      outboxId: outbox.id,
+      errorCode: null,
+      errorMessage: null,
+    };
+  } catch (err) {
+    logger.error('Failed to queue transaction for deferred processing:', err);
+    return {
+      status: 'error',
+      outboxId: null,
+      errorCode: 'OUTBOX_ERROR',
+      errorMessage: `Failed to queue transaction: ${err.message}`,
+    };
+  }
+};
+
 module.exports = {
   submitTransaction,
+  submitTransactionAsync,
   STELLAR_ERRORS,
   // exported for testing only
   _parseHorizonError: parseHorizonError,
