@@ -60,6 +60,23 @@ pub fn update(env: Env, name: String, address: Address, version: u32) -> Result<
 
 `Result<(), Error>`
 
+### `validation_report`
+Performs a validation report of the registry.  Flags missing required contracts, duplicate addresses across different aliases, and placeholder records.  # Returns A structured report (`ValidationReport`) flagging: - **Missing**: Required core contracts (e.g., `prize-pool`) not registered. - **Duplicate**: Multiple aliases pointing to the identical address. - **Placeholder**: Address matches the zero-address placeholder (`CAAA...`).  # Operator Guidance - **Missing** records: Deploy the missing contract and register it. - **Duplicate** records: Investigate alias misconfigurations. - **Placeholder** records: Replace with real addresses before production use.
+
+```rust
+pub fn validation_report(env: Env) -> Result<ValidationReport, Error>
+```
+
+#### Parameters
+
+| Name | Type |
+|------|------|
+| `env` | `Env` |
+
+#### Return Type
+
+`Result<ValidationReport, Error>`
+
 ### `resolve`
 Resolve the current address for a contract name.  # Arguments * `name` - Contract name to resolve  # Returns The current contract address  # Errors * `NotInitialized` - If registry hasn't been initialized * `ContractNotFound` - If contract name doesn't exist  # Note This is a public read operation - no authorization required
 

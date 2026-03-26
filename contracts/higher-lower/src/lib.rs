@@ -17,6 +17,9 @@ use soroban_sdk::{
 pub const MIN_WAGER: i128 = 1;
 pub const MAX_WAGER: i128 = 1_000_000_000;
 pub const ANCHOR_VALUE: u32 = 50;
+/// Ledgers a round may stay unresolved before it is eligible for cleanup.
+/// ~24 hours at ~5 s/ledger.
+pub const ROUND_EXPIRY_LEDGERS: u32 = 17_280;
 
 // ---------------------------------------------------------------------------
 // External contract clients
@@ -55,6 +58,10 @@ pub enum Error {
     InsufficientBalance = 10,
     HouseInsufficientFunds = 11,
     Overflow = 12,
+    /// Cleanup called before the expiry threshold has been reached.
+    NotExpired = 13,
+    /// Attempt to resolve or interact with an already-expired game.
+    GameExpired = 14,
 }
 
 // ---------------------------------------------------------------------------
@@ -75,9 +82,12 @@ pub struct GameData {
     pub prediction: Prediction,
     pub wager: i128,
     pub resolved: bool,
+    pub expired: bool,
     pub outcome: u32,
     pub win: bool,
     pub payout: i128,
+    /// Ledger sequence at which the round was opened.
+    pub created_at: u32,
 }
 
 #[contracttype]
@@ -109,6 +119,15 @@ pub struct GameResolved {
     pub outcome: u32,
     pub win: bool,
     pub payout: i128,
+}
+
+#[contractevent]
+pub struct RoundExpired {
+    #[topic]
+    pub game_id: u64,
+    pub player: Address,
+    /// Wager amount refunded to the player.
+    pub refund: i128,
 }
 
 // ---------------------------------------------------------------------------
@@ -179,9 +198,11 @@ impl HigherLower {
             prediction,
             wager,
             resolved: false,
+            expired: false,
             outcome: 0,
             win: false,
             payout: 0,
+            created_at: env.ledger().sequence(),
         };
         env.storage().persistent().set(&key, &game);
 
@@ -208,6 +229,10 @@ impl HigherLower {
 
         if game.resolved {
             return Err(Error::AlreadyResolved);
+        }
+
+        if game.expired {
+            return Err(Error::GameExpired);
         }
 
         let rng_contract = get_rng_contract(&env)?;
@@ -253,6 +278,65 @@ impl HigherLower {
             outcome,
             win,
             payout,
+        }
+        .publish(&env);
+
+        Ok(())
+    }
+
+    /// Expires a stale round that has not been resolved within `ROUND_EXPIRY_LEDGERS`.
+    ///
+    /// Callable by anyone. On success the wager is refunded to the player and
+    /// the round is transitioned to the terminal `expired` state.
+    ///
+    /// # Expiry Model
+    /// - Threshold: `ROUND_EXPIRY_LEDGERS = 17_280` ledgers (≈24 h at 5 s/ledger).
+    /// - A `RoundExpired` event is emitted on success, recording `game_id`, `player`, and `refund` amount.
+    /// - Resolved or already-expired rounds are never re-targeted.
+    ///
+    /// # Errors
+    /// * `NotInitialized` - Registry not initialised.
+    /// * `GameNotFound`   - No round stored under this ID.
+    /// * `AlreadyResolved` - Round was already properly resolved.
+    /// * `GameExpired`   - Round was already cleaned up via `expire_round`.
+    /// * `NotExpired`    - Threshold not yet reached; round is still active.
+    pub fn expire_round(env: Env, game_id: u64) -> Result<(), Error> {
+        require_initialized(&env)?;
+
+        let key = DataKey::Game(game_id);
+        let mut game: GameData = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .ok_or(Error::GameNotFound)?;
+
+        if game.resolved {
+            return Err(Error::AlreadyResolved);
+        }
+
+        if game.expired {
+            return Err(Error::GameExpired);
+        }
+
+        let current_ledger = env.ledger().sequence();
+        if current_ledger < game.created_at.saturating_add(ROUND_EXPIRY_LEDGERS) {
+            return Err(Error::NotExpired);
+        }
+
+        // Refund the escrowed wager back to the player.
+        let balance_contract = get_balance_contract(&env)?;
+        let game_addr = env.current_contract_address();
+        let balance_client = BalanceClient::new(&env, &balance_contract);
+        balance_client.debit(&game_addr, &game_addr, &game.wager, &symbol_short!("expiry"));
+        balance_client.credit(&game_addr, &game.player, &game.wager, &symbol_short!("refund"));
+
+        game.expired = true;
+        env.storage().persistent().set(&key, &game);
+
+        RoundExpired {
+            game_id,
+            player: game.player,
+            refund: game.wager,
         }
         .publish(&env);
 
@@ -309,202 +393,4 @@ fn get_balance_contract(env: &Env) -> Result<Address, Error> {
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
-mod test {
-    use super::*;
-    use soroban_sdk::{
-        contract, contractimpl, contracttype, testutils::Address as _, token::StellarAssetClient,
-        Address, Env,
-    };
-    use stellarcade_user_balance::{UserBalance, UserBalanceClient};
-
-    // -----------------------------
-    // Mock RNG contract
-    // -----------------------------
-
-    #[contract]
-    pub struct MockRng;
-
-    #[contracttype]
-    pub enum RngKey {
-        Result(u64),
-        Ready(u64),
-    }
-
-    #[contractimpl]
-    impl MockRng {
-        pub fn set_result(env: Env, game_id: u64, result: u32) {
-            env.storage().persistent().set(&RngKey::Result(game_id), &result);
-            env.storage().persistent().set(&RngKey::Ready(game_id), &true);
-        }
-
-        pub fn is_ready(env: Env, game_id: u64) -> bool {
-            env.storage()
-                .persistent()
-                .get(&RngKey::Ready(game_id))
-                .unwrap_or(false)
-        }
-
-        pub fn get_result(env: Env, game_id: u64) -> u32 {
-            env.storage()
-                .persistent()
-                .get(&RngKey::Result(game_id))
-                .unwrap_or(0)
-        }
-    }
-
-    fn create_token<'a>(env: &'a Env, token_admin: &Address) -> (Address, StellarAssetClient<'a>) {
-        let contract = env.register_stellar_asset_contract_v2(token_admin.clone());
-        let client = StellarAssetClient::new(env, &contract.address());
-        (contract.address(), client)
-    }
-
-    fn setup(
-        env: &Env,
-    ) -> (
-        HigherLowerClient<'_>,
-        Address, // admin
-        Address, // player
-        Address, // house
-        UserBalanceClient<'_>,
-        MockRngClient<'_>,
-    ) {
-        env.mock_all_auths();
-
-        let admin = Address::generate(env);
-        let player = Address::generate(env);
-        let token_admin = Address::generate(env);
-
-        let (token_addr, token_sac) = create_token(env, &token_admin);
-
-        let balance_id = env.register(UserBalance, ());
-        let balance_client = UserBalanceClient::new(env, &balance_id);
-        balance_client.init(&admin, &token_addr);
-
-        let rng_id = env.register(MockRng, ());
-        let rng_client = MockRngClient::new(env, &rng_id);
-
-        let higher_lower_id = env.register(HigherLower, ());
-        let higher_lower_client = HigherLowerClient::new(env, &higher_lower_id);
-
-        let house = higher_lower_id.clone();
-
-        higher_lower_client.init(&admin, &rng_id, &Address::generate(env), &balance_id);
-
-        balance_client.authorize_game(&admin, &higher_lower_id);
-
-        token_sac.mint(&player, &1_000);
-        token_sac.mint(&house, &5_000);
-
-        balance_client.deposit(&player, &1_000);
-        balance_client.deposit(&house, &5_000);
-
-        (
-            higher_lower_client,
-            admin,
-            player,
-            house,
-            balance_client,
-            rng_client,
-        )
-    }
-
-    #[test]
-    fn test_place_prediction_happy_path() {
-        let env = Env::default();
-        let (client, _admin, player, house, balance, _rng) = setup(&env);
-
-        client.place_prediction(&player, &0, &100, &1);
-
-        let game = client.get_game(&1).unwrap();
-        assert_eq!(game.player, player);
-        assert_eq!(game.prediction, Prediction::Higher);
-        assert_eq!(game.wager, 100);
-        assert!(!game.resolved);
-
-        assert_eq!(balance.balance_of(&player), 900);
-        assert_eq!(balance.balance_of(&house), 5_100);
-    }
-
-    #[test]
-    fn test_win_resolution_path() {
-        let env = Env::default();
-        let (client, _admin, player, house, balance, rng) = setup(&env);
-
-        client.place_prediction(&player, &0, &100, &2);
-
-        rng.set_result(&2, &80);
-        client.resolve_game(&2);
-
-        let game = client.get_game(&2).unwrap();
-        assert!(game.resolved);
-        assert!(game.win);
-        assert_eq!(game.payout, 200);
-
-        assert_eq!(balance.balance_of(&player), 1_100);
-        assert_eq!(balance.balance_of(&house), 4_900);
-    }
-
-    #[test]
-    fn test_loss_resolution_path() {
-        let env = Env::default();
-        let (client, _admin, player, house, balance, rng) = setup(&env);
-
-        client.place_prediction(&player, &0, &100, &3);
-
-        rng.set_result(&3, &20);
-        client.resolve_game(&3);
-
-        let game = client.get_game(&3).unwrap();
-        assert!(game.resolved);
-        assert!(!game.win);
-        assert_eq!(game.payout, 0);
-
-        assert_eq!(balance.balance_of(&player), 900);
-        assert_eq!(balance.balance_of(&house), 5_100);
-    }
-
-    #[test]
-    fn test_invalid_prediction_rejected() {
-        let env = Env::default();
-        let (client, _admin, player, _house, _balance, _rng) = setup(&env);
-
-        let result = client.try_place_prediction(&player, &2, &100, &4);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_insufficient_balance_rejected() {
-        let env = Env::default();
-        let (client, _admin, player, _house, balance, _rng) = setup(&env);
-
-        balance.withdraw(&player, &1_000);
-
-        let result = client.try_place_prediction(&player, &0, &100, &5);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_duplicate_and_double_resolution_blocked() {
-        let env = Env::default();
-        let (client, _admin, player, _house, _balance, rng) = setup(&env);
-
-        client.place_prediction(&player, &1, &100, &6);
-        let dup = client.try_place_prediction(&player, &1, &100, &6);
-        assert!(dup.is_err());
-
-        rng.set_result(&6, &20);
-        client.resolve_game(&6);
-        let again = client.try_resolve_game(&6);
-        assert!(again.is_err());
-    }
-
-    #[test]
-    fn test_resolve_before_rng_ready_rejected() {
-        let env = Env::default();
-        let (client, _admin, player, _house, _balance, _rng) = setup(&env);
-
-        client.place_prediction(&player, &1, &100, &7);
-        let result = client.try_resolve_game(&7);
-        assert!(result.is_err());
-    }
-}
+mod tests;

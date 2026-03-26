@@ -10,9 +10,13 @@ This document covers the deployment process for Stellarcade smart contracts and 
    ```bash
    ./scripts/deploy-contracts.sh --build
    ```
-2. Deploy to Futurenet/Testnet:
+2. Validate the deployment environment (Dry-Run):
    ```bash
-   soroban contract deploy --wasm target/wasm32-unknown-unknown/release/prize_pool.wasm --source <YOUR_IDENTITY> --network testnet
+   ./scripts/deploy-contracts.sh --dry-run --network testnet --source <YOUR_IDENTITY>
+   ```
+3. Deploy to Futurenet/Testnet:
+   ```bash
+   ./scripts/deploy-contracts.sh --network testnet --source <YOUR_IDENTITY>
    ```
 3. Save the returned Contract IDs to your `.env` file in the backend.
 
@@ -49,7 +53,25 @@ Ensure the following variables are set in your production environment:
 We use GitHub Actions for our CI/CD pipeline.
 
 - **Lint & Test**: Triggered on every Pull Request.
-- **Build & Deploy**: Triggered on every merge to `main`.
+- **Build & Deploy**: Triggered on every merge to `main` (includes a dry-run validation step).
+
+## 🛡 Dry-Run Validation
+
+Before any mutating deployment step occurs, you can run a dry-run to validate required inputs, secrets, and network identifiers.
+
+### Using the Shell Script
+Run the deployment script with the `--dry-run` flag:
+```bash
+./scripts/deploy-contracts.sh --dry-run --network testnet
+```
+
+### Using the Backend Service
+The `DeploymentService` provides a programmatic way to check deployment readiness:
+```javascript
+const DeploymentService = require('./src/services/deployment.service');
+const report = await DeploymentService.performDryRun();
+console.log(report);
+```
 
 ## 📈 Monitoring
 

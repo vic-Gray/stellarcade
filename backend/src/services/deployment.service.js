@@ -51,6 +51,21 @@ class DeploymentService {
             return { synced: false, error: err.message };
         }
     }
+
+    /**
+     * Performs a comprehensive dry-run validation of the deployment environment and artifacts.
+     */
+    async performDryRun() {
+        try {
+            return DeploymentUtil.generateValidationReport();
+        } catch (err) {
+            return {
+                success: false,
+                error: err.message,
+                timestamp: new Date().toISOString()
+            };
+        }
+    }
 }
 
 module.exports = new DeploymentService(process.env.NETWORK_PROFILE || 'Dev');

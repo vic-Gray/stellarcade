@@ -67,6 +67,67 @@ class DeploymentUtil {
         }
         return deployment.contracts[contractName];
     }
+
+    /**
+     * Validates that all required environment variables for Stellar deployment are present.
+     */
+    static validateEnvironment() {
+        const required = ['STELLAR_NETWORK', 'HORIZON_URL', 'NETWORK_PASSPHRASE'];
+        const missing = required.filter((key) => !process.env[key]);
+
+        return {
+            valid: missing.length === 0,
+            missing,
+            values: {
+                network: process.env.STELLAR_NETWORK,
+                horizon: process.env.HORIZON_URL,
+            },
+        };
+    }
+
+    /**
+     * Checks if the required WASM artifacts exist for deployment.
+     */
+    static checkArtifacts(contractNames = ['prize_pool', 'rng', 'coin_flip']) {
+        const results = {};
+        let allExist = true;
+
+        // Assuming contracts are located relative to the workspace root in target/wasm32-unknown-unknown/release/
+        const artifactDir = path.join(__dirname, '../../../target/wasm32-unknown-unknown/release/');
+
+        contractNames.forEach((name) => {
+            const fileName = `${name.replace(/-/g, '_')}.wasm`;
+            const filePath = path.join(artifactDir, fileName);
+            const exists = fs.existsSync(filePath);
+            results[name] = { exists, path: filePath };
+            if (!exists) allExist = false;
+        });
+
+        return { allExist, artifacts: results };
+    }
+
+    /**
+     * Generates a comprehensive validation report for a deployment dry-run.
+     */
+    static generateValidationReport() {
+        const env = this.validateEnvironment();
+        const artifacts = this.checkArtifacts();
+
+        return {
+            timestamp: new Date().toISOString(),
+            success: env.valid && artifacts.allExist,
+            checks: {
+                environment: env,
+                artifacts,
+            },
+            summary: {
+                missingVars: env.missing,
+                missingArtifacts: Object.entries(artifacts.artifacts)
+                    .filter(([_, status]) => !status.exists)
+                    .map(([name]) => name),
+            },
+        };
+    }
 }
 
 module.exports = DeploymentUtil;

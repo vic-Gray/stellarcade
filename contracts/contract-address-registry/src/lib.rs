@@ -93,6 +93,8 @@ pub enum DataKey {
     LatestVersion(String),
     /// Initialization flag
     Initialized,
+    /// Vector of all registered contract names
+    AllNames,
 }
 
 #[contracttype]
@@ -106,6 +108,30 @@ pub struct ContractRecord {
     pub registered_at: u32,
     /// Address that performed the registration/update
     pub registered_by: Address,
+}
+
+#[contracttype]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IssueType {
+    Missing = 1,
+    Duplicate = 2,
+    Placeholder = 3,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RegistryIssue {
+    pub contract_name: String,
+    pub issue_type: IssueType,
+    pub details: String,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ValidationReport {
+    pub timestamp: u32,
+    pub issues: Vec<RegistryIssue>,
+    pub total_checked: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -225,6 +251,15 @@ impl ContractAddressRegistry {
             PERSISTENT_BUMP_LEDGERS,
         );
 
+        // Update AllNames list
+        let mut names: Vec<String> = env
+            .storage()
+            .instance()
+            .get(&DataKey::AllNames)
+            .unwrap_or_else(|| Vec::new(&env));
+        names.push_back(name);
+        env.storage().instance().set(&DataKey::AllNames, &names);
+
         Ok(())
     }
 
@@ -306,6 +341,107 @@ impl ContractAddressRegistry {
         );
 
         Ok(())
+    }
+
+    /// Performs a validation report of the registry.
+    ///
+    /// Flags missing required contracts, duplicate addresses across different aliases,
+    /// and placeholder records.
+    ///
+    /// # Returns
+    /// A structured report (`ValidationReport`) flagging:
+    /// - **Missing**: Required core contracts (e.g., `prize-pool`) not registered.
+    /// - **Duplicate**: Multiple aliases pointing to the identical address.
+    /// - **Placeholder**: Address matches the zero-address placeholder (`CAAA...`).
+    ///
+    /// # Operator Guidance
+    /// - **Missing** records: Deploy the missing contract and register it.
+    /// - **Duplicate** records: Investigate alias misconfigurations.
+    /// - **Placeholder** records: Replace with real addresses before production use.
+    pub fn validation_report(env: Env) -> Result<ValidationReport, Error> {
+        Self::require_initialized(&env)?;
+
+        let mut issues = Vec::new(&env);
+        let names_in_storage: Vec<String> = env
+            .storage()
+            .instance()
+            .get(&DataKey::AllNames)
+            .unwrap_or_else(|| Vec::new(&env));
+
+        let mut addresses = Vec::new(&env);
+        let mut total_checked = 0;
+
+        // 1. Check for missing core contracts
+        let core_contracts = Vec::from_array(
+            &env,
+            [
+                String::from_str(&env, "prize-pool"),
+                String::from_str(&env, "random-generator"),
+                String::from_str(&env, "coin-flip"),
+            ],
+        );
+
+        for core_name in core_contracts.iter() {
+            if !env
+                .storage()
+                .persistent()
+                .has(&DataKey::Contract(core_name.clone()))
+            {
+                issues.push_back(RegistryIssue {
+                    contract_name: core_name,
+                    issue_type: IssueType::Missing,
+                    details: String::from_str(&env, "Required core contract is not registered"),
+                });
+            }
+        }
+
+        // 2. Iterate through all registered contracts for Duplicate and Placeholder checks
+        for name in names_in_storage.iter() {
+            total_checked += 1;
+            if let Some(record) = env
+                .storage()
+                .persistent()
+                .get::<DataKey, ContractRecord>(&DataKey::Contract(name.clone()))
+            {
+                // Placeholder Check (all-zeros address)
+                if Self::is_placeholder(&env, &record.address) {
+                    issues.push_back(RegistryIssue {
+                        contract_name: name.clone(),
+                        issue_type: IssueType::Placeholder,
+                        details: String::from_str(&env, "Contract address is a zero-address placeholder"),
+                    });
+                }
+
+                // Duplicate Check
+                for (idx, other_addr) in addresses.iter().enumerate() {
+                    if other_addr == record.address {
+                        let _ = names_in_storage.get(idx as u32); // acknowledge the duplicate name exists
+                        issues.push_back(RegistryIssue {
+                            contract_name: name.clone(),
+                            issue_type: IssueType::Duplicate,
+                            details: String::from_str(&env, "Shares address with another registered contract"),
+                        });
+                        break;
+                    }
+                }
+                addresses.push_back(record.address);
+            }
+        }
+
+        Ok(ValidationReport {
+            timestamp: env.ledger().sequence(),
+            issues,
+            total_checked,
+        })
+    }
+
+    /// Helper to detect placeholder addresses (explicit zero-address check).
+    /// Placeholder is defined as the Stellar zero-address strkey:
+    /// CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM
+    fn is_placeholder(env: &Env, address: &Address) -> bool {
+        let zero_strkey = String::from_str(env, "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM");
+        let placeholder_addr = Address::from_string(&zero_strkey);
+        address == &placeholder_addr
     }
 
     /// Resolve the current address for a contract name.
@@ -876,5 +1012,77 @@ mod test {
             let resolved = client.resolve(&name);
             assert_eq!(resolved, addr);
         }
+    }
+
+    // ── Validation Report Tests ───────────────────────────────────────────
+
+    #[test]
+    fn test_validation_report_healthy() {
+        let (env, client, admin, addr1) = setup_test();
+        init_registry(&client, &admin);
+
+        let addr2 = Address::generate(&env);
+        let addr3 = Address::generate(&env);
+
+        client.register(&String::from_str(&env, "prize-pool"), &addr1, &1);
+        client.register(&String::from_str(&env, "random-generator"), &addr2, &1);
+        client.register(&String::from_str(&env, "coin-flip"), &addr3, &1);
+
+        let report = client.validation_report();
+        assert_eq!(report.issues.len(), 0);
+        assert_eq!(report.total_checked, 3);
+    }
+
+    #[test]
+    fn test_validation_report_missing() {
+        let (env, client, admin, addr1) = setup_test();
+        init_registry(&client, &admin);
+
+        // Only register one
+        client.register(&String::from_str(&env, "prize-pool"), &addr1, &1);
+
+        let report = client.validation_report();
+        // Should flag 2 missing (rng, coin-flip)
+        assert_eq!(report.issues.len(), 2);
+        assert_eq!(report.issues.get(0).unwrap().issue_type, IssueType::Missing);
+        assert_eq!(report.issues.get(1).unwrap().issue_type, IssueType::Missing);
+    }
+
+    #[test]
+    fn test_validation_report_duplicate() {
+        let (env, client, admin, addr1) = setup_test();
+        init_registry(&client, &admin);
+
+        client.register(&String::from_str(&env, "prize-pool"), &addr1, &1);
+        // Register another one with the SAME address
+        client.register(&String::from_str(&env, "other-alias"), &addr1, &1);
+
+        let report = client.validation_report();
+        // Should flag 2 missing (rng, coin-flip) + 1 duplicate
+        assert_eq!(report.issues.len(), 3);
+        
+        let mut found_duplicate = false;
+        for issue in report.issues.iter() {
+            if issue.issue_type == IssueType::Duplicate {
+                found_duplicate = true;
+                assert_eq!(issue.contract_name, String::from_str(&env, "other-alias"));
+            }
+        }
+        assert!(found_duplicate);
+    }
+
+    #[test]
+    fn test_validation_report_placeholder() {
+        let (env, client, admin, _) = setup_test();
+        init_registry(&client, &admin);
+
+        let zero_strkey = String::from_str(&env, "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM");
+        let placeholder_addr = Address::from_string(&zero_strkey);
+
+        client.register(&String::from_str(&env, "prize-pool"), &placeholder_addr, &1);
+
+        let report = client.validation_report();
+        // Should flag 2 missing + 1 placeholder
+        assert!(report.issues.iter().any(|i| i.issue_type == IssueType::Placeholder));
     }
 }
