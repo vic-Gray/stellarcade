@@ -85,3 +85,41 @@ pub fn penalty_state(env: Env, penalty_id: u64) -> PenaltyRecord
 
 `PenaltyRecord`
 
+### `preview_slash`
+Preview a proposed slash against the account balance without mutating state.
+
+```rust
+pub fn preview_slash(env: Env, account: Address, slash_amount: i128, token_address: Address) -> SlashPreview
+```
+
+#### Parameters
+
+| Name | Type |
+|------|------|
+| `env` | `Env` |
+| `account` | `Address` |
+| `slash_amount` | `i128` |
+| `token_address` | `Address` |
+
+#### Return Type
+
+`SlashPreview`
+
+### `penalty_summary`
+Summarize the slashing history and latest penalty state for an account.
+
+```rust
+pub fn penalty_summary(env: Env, account: Address) -> PenaltySummary
+```
+
+#### Parameters
+
+| Name | Type |
+|------|------|
+| `env` | `Env` |
+| `account` | `Address` |
+
+#### Return Type
+
+`PenaltySummary`
+
