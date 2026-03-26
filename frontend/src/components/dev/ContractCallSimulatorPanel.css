@@ -32,6 +32,8 @@
 .contract-call-simulator__body {
   padding: 0.65rem 0.75rem 0.85rem;
   border-top: 1px solid var(--cc-sim-border, #30363d);
+  max-height: min(75vh, 38rem);
+  overflow: auto;
 }
 
 .contract-call-simulator__hint {
@@ -49,6 +51,13 @@
   flex-direction: column;
   gap: 0.2rem;
   margin-bottom: 0.55rem;
+}
+
+.contract-call-simulator__preset-field {
+  padding: 0.4rem 0.45rem;
+  border: 1px solid var(--cc-sim-border, #30363d);
+  border-radius: 4px;
+  background: rgba(121, 192, 255, 0.06);
 }
 
 .contract-call-simulator__field span {

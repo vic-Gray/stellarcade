@@ -10,6 +10,36 @@ import './ContractCallSimulatorPanel.css';
 
 const CONTRACT_ADDR_PLACEHOLDER = 'C…56 chars';
 
+interface ContractSimulatorPreset {
+  id: string;
+  label: string;
+  contractId: string;
+  method: string;
+  mode: 'success' | 'failure';
+  payload: string;
+  failureCode?: SorobanErrorCode;
+}
+
+const PRESETS: ContractSimulatorPreset[] = [
+  {
+    id: 'pool-state-success',
+    label: 'Pool state success',
+    contractId: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
+    method: 'get_pool_state',
+    mode: 'success',
+    payload: '{"available":"100","reserved":"20"}',
+  },
+  {
+    id: 'coin-flip-fail',
+    label: 'Coin flip simulation failed',
+    contractId: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
+    method: 'play_coin_flip',
+    mode: 'failure',
+    payload: 'Simulation failed due to temporary RPC issue',
+    failureCode: SorobanErrorCode.SimulationFailed,
+  },
+];
+
 /**
  * Collapsible dev-only UI to register mocked Soroban simulate / invoke outcomes.
  * Never rendered in production builds (parent should gate on `import.meta.env.DEV`).
@@ -24,6 +54,7 @@ export const ContractCallSimulatorPanel: React.FC = () => {
     SorobanErrorCode.RpcError,
   );
   const [status, setStatus] = useState<string | null>(null);
+  const [presetId, setPresetId] = useState('');
 
   const keys = useMemo(
     () => (open ? devListContractSimKeys() : []),
@@ -50,6 +81,30 @@ export const ContractCallSimulatorPanel: React.FC = () => {
     setStatus('Cleared all dev mocks.');
   };
 
+  const applyPreset = (nextPresetId: string) => {
+    setPresetId(nextPresetId);
+    if (!nextPresetId) {
+      setContractId('');
+      setMethod('');
+      setMode('success');
+      setPayload('{}');
+      setFailureCode(SorobanErrorCode.RpcError);
+      setStatus('Cleared preset values.');
+      return;
+    }
+
+    const preset = PRESETS.find((entry) => entry.id === nextPresetId);
+    if (!preset) {
+      return;
+    }
+    setContractId(preset.contractId);
+    setMethod(preset.method);
+    setMode(preset.mode);
+    setPayload(preset.payload);
+    setFailureCode(preset.failureCode ?? SorobanErrorCode.RpcError);
+    setStatus(`Applied preset: ${preset.label}.`);
+  };
+
   return (
     <aside
       className="contract-call-simulator"
@@ -70,6 +125,21 @@ export const ContractCallSimulatorPanel: React.FC = () => {
           <p className="contract-call-simulator__hint">
             Matches any <code>simulate</code> / <code>invoke</code> with the same contract id and method name.
           </p>
+          <label className="contract-call-simulator__field contract-call-simulator__preset-field">
+            <span>Preset scenario</span>
+            <select
+              value={presetId}
+              onChange={(e) => applyPreset(e.target.value)}
+              data-testid="contract-call-simulator-preset"
+            >
+              <option value="">Manual entry (no preset)</option>
+              {PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="contract-call-simulator__field">
             <span>Contract ID</span>
             <input

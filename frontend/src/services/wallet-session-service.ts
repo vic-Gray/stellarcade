@@ -248,6 +248,15 @@ export class WalletSessionService {
    * or null if not connected or no persisted row.
    */
   public getRemainingPersistenceMs(): number | null {
+    const expiresAt = this.getSessionExpiryTimestampMs();
+    if (expiresAt === null) return null;
+    return Math.max(0, expiresAt - Date.now());
+  }
+
+  /**
+   * Absolute timestamp (ms epoch) when persisted session expires, or null.
+   */
+  public getSessionExpiryTimestampMs(): number | null {
     if (this.state !== WalletSessionState.CONNECTED || !this.meta) {
       return null;
     }
@@ -256,8 +265,7 @@ export class WalletSessionService {
       if (!raw) return null;
       const parsed = JSON.parse(raw) as { storedAt?: number };
       if (typeof parsed.storedAt !== "number") return null;
-      const expiresAt = parsed.storedAt + this.sessionExpiryMs;
-      return Math.max(0, expiresAt - Date.now());
+      return parsed.storedAt + this.sessionExpiryMs;
     } catch {
       return null;
     }

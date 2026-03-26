@@ -58,4 +58,45 @@ describe("ContractCallSimulatorPanel", () => {
       devPeekContractSimResult("CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4", "x"),
     ).toBeNull();
   });
+
+  it("applies preset values deterministically", () => {
+    if (import.meta.env.PROD) return;
+    render(<ContractCallSimulatorPanel />);
+    fireEvent.click(screen.getByTestId("contract-call-simulator-toggle"));
+
+    fireEvent.change(screen.getByTestId("contract-call-simulator-preset"), {
+      target: { value: "pool-state-success" },
+    });
+
+    expect(
+      (screen.getByTestId("contract-call-simulator-contract") as HTMLInputElement).value,
+    ).toBe("CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4");
+    expect(
+      (screen.getByTestId("contract-call-simulator-method") as HTMLInputElement).value,
+    ).toBe("get_pool_state");
+    expect(
+      (screen.getByTestId("contract-call-simulator-payload") as HTMLTextAreaElement).value,
+    ).toBe('{"available":"100","reserved":"20"}');
+  });
+
+  it("allows manual overrides after preset application", () => {
+    if (import.meta.env.PROD) return;
+    render(<ContractCallSimulatorPanel />);
+    fireEvent.click(screen.getByTestId("contract-call-simulator-toggle"));
+
+    fireEvent.change(screen.getByTestId("contract-call-simulator-preset"), {
+      target: { value: "coin-flip-fail" },
+    });
+    fireEvent.change(screen.getByTestId("contract-call-simulator-method"), {
+      target: { value: "custom_method" },
+    });
+
+    fireEvent.click(screen.getByTestId("contract-call-simulator-register"));
+    expect(
+      devPeekContractSimResult(
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+        "custom_method",
+      ),
+    ).not.toBeNull();
+  });
 });

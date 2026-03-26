@@ -1,69 +1,63 @@
 # Contributing to Stellarcade
 
-First off, thank you for considering contributing to Stellarcade! It's people like you that make Stellarcade such a great tool.
+Thanks for contributing to Stellarcade.
 
-## 🌟 Welcome Message
+## How to Contribute
 
-We are excited to have you here! Stellarcade is a community-driven project aiming to bring the best arcade experience to the Stellar blockchain. Whether you're a back-end wizard, a front-end artist, a smart contract expert, or a documentation enthusiast, there's a place for you.
+1. Find an issue to work on.
+2. Fork and clone the repository.
+3. Create a focused branch for your work.
+4. Implement the change and add or update tests.
+5. Run the local checks.
+6. Open a pull request against `main`.
 
-## 🚀 How to Contribute
+## Development Setup
 
-1.  **Find an Issue**: Check out our [Issues](https://github.com/stellar/stellarcade/issues) page. Look for "good first issue" labels if you're new!
-2.  **Fork & Clone**: Fork the repository and clone it to your local machine.
-3.  **Branch**: Create a new branch for your work (e.g., `feat/add-new-game` or `fix/payout-bug`).
-4.  **Implement**: Write your code! Follow our style guidelines and add tests.
-5.  **Test**: Ensure everything works as expected.
-6.  **Pull Request**: Submit a PR back to the `main` branch with a clear description of your changes.
-
-## 🛠 Development Setup
-
-### Smart Contracts (Rust/Soroban)
+### Smart Contracts
 
 - Install [Rust](https://www.rust-lang.org/tools/install).
-- Install Soroban CLI: `cargo install --locked soroban-cli`.
-- Run tests: `cargo test` in the specific contract directory.
+- Install Soroban CLI: `cargo install --locked soroban-cli`
+- Run tests in the touched crate with `cargo test`.
 
-### Backend (Node.js)
+### Backend
 
-- Install Node.js v18+.
-- Install dependencies: `cd backend && npm install`.
-- Run dev server: `npm run dev`.
+- Install Node.js.
+- Install dependencies with `cd backend && npm install`.
+- Start the dev server with `npm run dev`.
+
+### Frontend
+
+- Install Node.js.
+- Install dependencies with `cd frontend && npm install`.
+- Start the dev server with `npm run dev`.
 
 ### Infrastructure
 
 - Install Docker and Docker Compose.
-- Start local services: `docker-compose up -d`.
+- Start local services with `docker-compose up -d`.
 
-## 📜 Code Style Guidelines
+## Git Hooks
 
-- **JavaScript/Node.js**: Use camelCase for variables/functions. Follow the ESLint configuration.
-- **Rust**: Use snake_case for variables/functions. Run `cargo fmt` before committing.
-- **SQL**: Use snake_case for table names and columns.
+- Enable the shared repo hooks right after cloning.
+- macOS/Linux: `bash scripts/setup-hooks.sh`
+- Windows PowerShell: `powershell -ExecutionPolicy Bypass -File scripts/setup-hooks.ps1`
+- Verify the setup with `git config --get core.hooksPath`
+- The hooks catch common contract, backend, and frontend failures before push.
 
-## 🚜 Pull Request Process
+## Code Style
 
-- Keep PRs focused. One feature/fix per PR is preferred.
-- Update documentation if you're changing functionality.
-- Ensure CI checks pass.
-- A maintainer will review your PR and provide feedback.
+- JavaScript and TypeScript: follow the ESLint configuration.
+- Rust: use `snake_case` and run `cargo fmt`.
+- SQL: use `snake_case` for table and column names.
 
-## 🐛 Issue Reporting
+## Pull Request Process
 
-- Use the provided [Issue Templates](.github/ISSUE_TEMPLATE/).
-- Be as descriptive as possible. Include steps to reproduce for bugs.
+- Keep each PR focused on one change area.
+- Update docs when behavior changes.
+- Run the repo hooks before pushing so CI failures are caught locally.
+- Ensure CI checks pass before requesting review.
 
-## 🗺 Areas Needing Help
+## Issue Reporting
 
-- **Smart Contracts**: Complex game logic and security optimizations.
-- **Backend**: Scaling the API and managing large prize pools.
-- **Frontend**: Creating a "wow" UI (Work in Progress).
-- **Documentation**: Improving guides and tutorials.
-- **Testing**: Expanding our test suites.
-
-## 🏆 Recognition
-
-Contributors will be featured in our project README and Discord!
-
----
-
-_Thank you for being part of the Stellarcade journey!_
+- Use the issue templates in `.github/ISSUE_TEMPLATE/`.
+- Include reproduction steps for bugs and exact scope for features.

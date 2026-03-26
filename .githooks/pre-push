@@ -1,15 +1,28 @@
 #!/bin/bash
 # Pre-Push Hook for Stellarcade
-# Runs strict checks only on touched contract crates and validates doc sync.
+# Runs strict checks on touched contracts and app surfaces before push.
 # Enable this hook: git config core.hooksPath .githooks
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 FAIL=0
 
-echo "🚀 Running pre-push verification..."
+has_npm_script() {
+    local package_dir="$1"
+    local script_name="$2"
 
-# ── Collect changed files across all pushed refs ─────────────────────────────
+    if ! command -v node >/dev/null 2>&1; then
+        return 1
+    fi
+
+    (
+        cd "$package_dir" &&
+        node -e "const pkg=require('./package.json'); process.exit(pkg.scripts && pkg.scripts['$script_name'] ? 0 : 1)"
+    )
+}
+
+echo "Running pre-push verification..."
+
 CHANGED_FILES=""
 while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
     [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
@@ -22,11 +35,9 @@ while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
     CHANGED_FILES="$CHANGED_FILES$(git diff --name-only "$RANGE" 2>/dev/null)"$'\n'
 done
 
-# ── Determine which contract crates were touched ──────────────────────────────
 TOUCHED_CRATES=()
 for crate_dir in "$REPO_ROOT"/contracts/*/; do
     crate=$(basename "$crate_dir")
-    # Skip non-crate directories
     [ -f "$crate_dir/Cargo.toml" ] || continue
     [ -d "$crate_dir/src" ] || continue
     if echo "$CHANGED_FILES" | grep -q "^contracts/$crate/"; then
@@ -34,80 +45,121 @@ for crate_dir in "$REPO_ROOT"/contracts/*/; do
     fi
 done
 
-# ── 1. Strict Rust checks (fmt + clippy + test) for each touched crate ────────
 if command -v cargo >/dev/null 2>&1; then
     if [ ${#TOUCHED_CRATES[@]} -gt 0 ]; then
-        echo "🦀 Strict Rust checks on: ${TOUCHED_CRATES[*]}"
+        echo "Strict Rust checks on: ${TOUCHED_CRATES[*]}"
         for crate in "${TOUCHED_CRATES[@]}"; do
             CRATE_DIR="$REPO_ROOT/contracts/$crate"
-            echo "   ▶ $crate: fmt"
+
+            echo "  -> $crate: fmt"
             if ! (cd "$CRATE_DIR" && cargo fmt --all -- --check 2>&1); then
-                echo "❌ fmt failed in $crate."
-                echo "   Fix: cd contracts/$crate && cargo fmt --all"
+                echo "fmt failed in $crate."
+                echo "Fix: cd contracts/$crate && cargo fmt --all"
                 FAIL=1
             fi
-            echo "   ▶ $crate: clippy"
+
+            echo "  -> $crate: clippy"
             if ! (cd "$CRATE_DIR" && cargo clippy --all-targets --all-features -- -D warnings 2>&1); then
-                echo "❌ clippy failed in $crate. Resolve all warnings before pushing."
+                echo "clippy failed in $crate. Resolve warnings before pushing."
                 FAIL=1
             fi
-            echo "   ▶ $crate: test"
+
+            echo "  -> $crate: test"
             if ! (cd "$CRATE_DIR" && cargo test 2>&1); then
-                echo "❌ Tests failed in $crate."
-                echo "   Fix: cd contracts/$crate && cargo test"
+                echo "Tests failed in $crate."
+                echo "Fix: cd contracts/$crate && cargo test"
                 FAIL=1
             fi
         done
     else
-        echo "ℹ️  No contract crates changed — skipping Rust checks."
+        echo "No contract crates changed; skipping Rust checks."
     fi
 else
-    echo "⚠️  Cargo not found. Install Rust: https://rustup.rs"
+    echo "Cargo not found. Install Rust: https://rustup.rs"
 fi
 
-# ── 2. Contract doc sync check ────────────────────────────────────────────────
 CONTRACTS_DOCS_CHANGED=$(echo "$CHANGED_FILES" | grep -E "^contracts/|^docs/contracts/" || true)
 if [ -n "$CONTRACTS_DOCS_CHANGED" ]; then
-    echo "📄 Checking contract doc sync..."
+    echo "Checking contract doc sync..."
     DOC_GEN_TOML="$REPO_ROOT/contracts/contract-doc-generator/Cargo.toml"
     if [ -f "$DOC_GEN_TOML" ]; then
-        if ! (cd "$REPO_ROOT" && cargo run --package stellarcade-contract-doc-generator \
-              --manifest-path "$DOC_GEN_TOML" 2>&1); then
-            echo "❌ Doc generator failed."
+        if ! (cd "$REPO_ROOT" && cargo run --package stellarcade-contract-doc-generator --manifest-path "$DOC_GEN_TOML" 2>&1); then
+            echo "Doc generator failed."
             FAIL=1
         elif [ -n "$(git status --porcelain docs/contracts 2>/dev/null)" ]; then
-            echo "❌ Contract docs are out of sync with source."
-            echo "   Fix: cargo run --package stellarcade-contract-doc-generator && git add docs/contracts"
+            echo "Contract docs are out of sync with source."
+            echo "Fix: cargo run --package stellarcade-contract-doc-generator && git add docs/contracts"
             git diff docs/contracts 2>/dev/null || true
             FAIL=1
         else
-            echo "✅ Contract doc sync OK."
+            echo "Contract doc sync OK."
         fi
     else
-        echo "⚠️  Doc generator not found — skipping doc sync check."
+        echo "Doc generator not found; skipping doc sync check."
     fi
 fi
 
-# ── 3. Backend tests (only when backend/ files changed) ───────────────────────
 BACKEND_CHANGED=$(echo "$CHANGED_FILES" | grep "^backend/" || true)
 if [ -n "$BACKEND_CHANGED" ]; then
-    echo "📦 Verifying backend..."
+    echo "Verifying backend..."
     if command -v npm >/dev/null 2>&1; then
+        if ! (cd "$REPO_ROOT/backend" && npm run lint 2>&1); then
+            echo "Backend lint failed."
+            echo "Fix: cd backend && npm run lint"
+            FAIL=1
+        fi
+
+        if has_npm_script "$REPO_ROOT/backend" "openapi:validate"; then
+            echo "Validating backend OpenAPI contract..."
+            if ! (cd "$REPO_ROOT/backend" && npm run openapi:validate 2>&1); then
+                echo "Backend OpenAPI validation failed."
+                echo "Fix: cd backend && npm run openapi:validate"
+                FAIL=1
+            fi
+        fi
+
         if ! (cd "$REPO_ROOT/backend" && npm test 2>&1); then
-            echo "❌ Backend tests failed."
-            echo "   Fix: cd backend && npm test"
+            echo "Backend tests failed."
+            echo "Fix: cd backend && npm test"
             FAIL=1
         fi
     else
-        echo "⚠️  NPM not found. Install Node.js: https://nodejs.org"
+        echo "NPM not found. Install Node.js: https://nodejs.org"
     fi
 fi
 
-# ── Result ────────────────────────────────────────────────────────────────────
+FRONTEND_CHANGED=$(echo "$CHANGED_FILES" | grep "^frontend/" || true)
+if [ -n "$FRONTEND_CHANGED" ]; then
+    echo "Verifying frontend..."
+    if command -v npm >/dev/null 2>&1; then
+        if ! (cd "$REPO_ROOT/frontend" && npm run lint 2>&1); then
+            echo "Frontend lint failed."
+            echo "Fix: cd frontend && npm run lint"
+            FAIL=1
+        fi
+
+        if has_npm_script "$REPO_ROOT/frontend" "typecheck"; then
+            if ! (cd "$REPO_ROOT/frontend" && npm run typecheck 2>&1); then
+                echo "Frontend typecheck failed."
+                echo "Fix: cd frontend && npm run typecheck"
+                FAIL=1
+            fi
+        fi
+
+        if ! (cd "$REPO_ROOT/frontend" && npm test 2>&1); then
+            echo "Frontend tests failed."
+            echo "Fix: cd frontend && npm test"
+            FAIL=1
+        fi
+    else
+        echo "NPM not found. Install Node.js: https://nodejs.org"
+    fi
+fi
+
 if [ $FAIL -ne 0 ]; then
     echo ""
-    echo "🚫 Pre-push checks FAILED — push aborted."
+    echo "Pre-push checks failed; push aborted."
     exit 1
 fi
 
-echo "✨ All checks passed! Proceeding with push."
+echo "All checks passed. Proceeding with push."

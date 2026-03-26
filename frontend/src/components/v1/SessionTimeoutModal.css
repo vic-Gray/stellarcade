@@ -33,6 +33,12 @@
   line-height: 1.5;
 }
 
+.session-timeout-modal__countdown {
+  display: inline-block;
+  min-width: 2ch;
+  text-align: right;
+}
+
 .session-timeout-modal__actions {
   display: flex;
   flex-wrap: wrap;

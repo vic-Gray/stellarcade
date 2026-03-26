@@ -39,6 +39,8 @@ export const SessionTimeoutModal: React.FC<SessionTimeoutModalProps> = ({
   testId = 'session-timeout-modal',
 }) => {
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
+  const [sessionExpiresAtMs, setSessionExpiresAtMs] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [phase, setPhase] = useState<'hidden' | 'warn' | 'expired'>('hidden');
   const [dismissed, setDismissed] = useState(false);
   const expiredHandled = useRef(false);
@@ -53,14 +55,17 @@ export const SessionTimeoutModal: React.FC<SessionTimeoutModalProps> = ({
       return;
     }
     const rem = sessionService.getRemainingPersistenceMs();
-    setRemainingMs(rem);
+    const expiresAt = sessionService.getSessionExpiryTimestampMs();
+    const syncedRemaining = expiresAt === null ? rem : Math.max(0, expiresAt - Date.now());
+    setSessionExpiresAtMs(expiresAt);
+    setRemainingMs(syncedRemaining);
 
-    if (rem === null) {
+    if (syncedRemaining === null) {
       setPhase('hidden');
       return;
     }
 
-    if (rem <= 0) {
+    if (syncedRemaining <= 0) {
       if (!expiredHandled.current) {
         expiredHandled.current = true;
         void sessionService.disconnect().finally(() => {
@@ -72,7 +77,7 @@ export const SessionTimeoutModal: React.FC<SessionTimeoutModalProps> = ({
       return;
     }
 
-    if (rem <= warnBeforeExpiryMs) {
+    if (syncedRemaining <= warnBeforeExpiryMs) {
       if (!dismissed) {
         setPhase('warn');
       } else {
@@ -97,8 +102,22 @@ export const SessionTimeoutModal: React.FC<SessionTimeoutModalProps> = ({
     };
   }, [tick, pollIntervalMs, sessionService]);
 
-  const secondsLeft =
-    remainingMs === null ? 0 : Math.max(0, Math.ceil(remainingMs / 1000));
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (sessionExpiresAtMs === null) {
+      setRemainingMs(null);
+      return;
+    }
+    setRemainingMs(Math.max(0, sessionExpiresAtMs - nowMs));
+  }, [sessionExpiresAtMs, nowMs]);
+
+  const secondsLeft = remainingMs === null ? 0 : Math.max(0, Math.ceil(remainingMs / 1000));
 
   const handleExtend = useCallback(() => {
     sessionService.extendPersistedSession();
@@ -147,9 +166,13 @@ export const SessionTimeoutModal: React.FC<SessionTimeoutModalProps> = ({
             <p
               id={`${testId}-desc-warn`}
               className="session-timeout-modal__body"
+              role="status"
+              aria-live="polite"
             >
               Your wallet session will expire in{' '}
-              <strong data-testid={`${testId}-countdown`}>{secondsLeft}</strong>{' '}
+              <strong className="session-timeout-modal__countdown" data-testid={`${testId}-countdown`}>
+                {secondsLeft}
+              </strong>{' '}
               second{secondsLeft === 1 ? '' : 's'}. Extend to stay signed in.
             </p>
             <div className="session-timeout-modal__actions">
