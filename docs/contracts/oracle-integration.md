@@ -88,3 +88,19 @@ pub fn get_request(env: Env, request_id: BytesN<32>) -> Option<OracleRequest>
 
 `Option<OracleRequest>`
 
+### `last_price_freshness`
+```rust
+pub fn last_price_freshness(env: Env, feed_id: BytesN<32>) -> PriceFreshness
+```
+
+#### Parameters
+
+| Name | Type |
+|------|------|
+| `env` | `Env` |
+| `feed_id` | `BytesN<32>` |
+
+#### Return Type
+
+`PriceFreshness`
+

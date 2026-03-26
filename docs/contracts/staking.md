@@ -115,3 +115,39 @@ pub fn position_of(env: Env, user: Address) -> UserPosition
 
 `UserPosition`
 
+### `preview_rewards`
+Preview pending rewards and current claimability without mutating state.
+
+```rust
+pub fn preview_rewards(env: Env, user: Address) -> Result<RewardPreview, Error>
+```
+
+#### Parameters
+
+| Name | Type |
+|------|------|
+| `env` | `Env` |
+| `user` | `Address` |
+
+#### Return Type
+
+`Result<RewardPreview, Error>`
+
+### `next_claim`
+Return deterministic next-claim eligibility metadata for a staker.
+
+```rust
+pub fn next_claim(env: Env, user: Address) -> Result<ClaimEligibility, Error>
+```
+
+#### Parameters
+
+| Name | Type |
+|------|------|
+| `env` | `Env` |
+| `user` | `Address` |
+
+#### Return Type
+
+`Result<ClaimEligibility, Error>`
+

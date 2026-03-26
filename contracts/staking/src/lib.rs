@@ -9,6 +9,7 @@ use soroban_sdk::{
 // ---------------------------------------------------------------------------
 
 const PRECISION: i128 = 1_000_000_000_000; // 1e12
+const CLAIM_COOLDOWN_SECONDS: u64 = 60;
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -24,6 +25,7 @@ pub enum Error {
     InvalidAmount = 4,
     Overflow = 5,
     InsufficientBalance = 6,
+    ClaimCooldownActive = 7,
 }
 
 // ---------------------------------------------------------------------------
@@ -59,6 +61,26 @@ pub struct UserPosition {
     pub amount: i128,
     pub reward_debt: i128,
     pub pending_rewards: i128,
+    pub last_claim_timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RewardPreview {
+    pub staked_amount: i128,
+    pub pending_rewards: i128,
+    pub claimable_now: i128,
+    pub cooldown_seconds: u64,
+    pub eligible_now: bool,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClaimEligibility {
+    pub eligible_now: bool,
+    pub next_claim_timestamp: u64,
+    pub cooldown_remaining_seconds: u64,
+    pub cooldown_seconds: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +151,11 @@ impl Staking {
 
     /// Set the reward rate (admin only).
     pub fn set_reward_rate(env: Env, admin: Address, rate: i128) -> Result<(), Error> {
-        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).ok_or(Error::NotInitialized)?;
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
         admin.require_auth();
         if admin != stored_admin {
             return Err(Error::NotAuthorized);
@@ -162,16 +188,22 @@ impl Staking {
                 amount: 0,
                 reward_debt: 0,
                 pending_rewards: 0,
+                last_claim_timestamp: 0,
             });
 
         // Calculate pending rewards before updating position
         if position.amount > 0 {
-            let pending = (position.amount * state.reward_per_share_acc / PRECISION) - position.reward_debt;
+            let pending =
+                (position.amount * state.reward_per_share_acc / PRECISION) - position.reward_debt;
             position.pending_rewards += pending;
         }
 
         // Transfer tokens from user
-        let staking_token: Address = env.storage().instance().get(&DataKey::StakingToken).unwrap();
+        let staking_token: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::StakingToken)
+            .unwrap();
         let token_client = token::Client::new(&env, &staking_token);
         token_client.transfer(&user, &env.current_contract_address(), &amount);
 
@@ -180,10 +212,16 @@ impl Staking {
         position.reward_debt = position.amount * state.reward_per_share_acc / PRECISION;
         state.total_staked += amount;
 
-        env.storage().persistent().set(&DataKey::Position(user.clone()), &position);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Position(user.clone()), &position);
         env.storage().instance().set(&DataKey::GlobalState, &state);
 
-        Staked { user: user.clone(), amount }.publish(&env);
+        Staked {
+            user: user.clone(),
+            amount,
+        }
+        .publish(&env);
 
         Ok(())
     }
@@ -191,7 +229,7 @@ impl Staking {
     /// Withdraw staked tokens and claim rewards.
     pub fn unstake(env: Env, user: Address, amount: i128) -> Result<(), Error> {
         user.require_auth();
-        
+
         let mut position: UserPosition = env
             .storage()
             .persistent()
@@ -207,7 +245,8 @@ impl Staking {
         let mut state: GlobalState = env.storage().instance().get(&DataKey::GlobalState).unwrap();
 
         // Calculate pending rewards
-        let pending = (position.amount * state.reward_per_share_acc / PRECISION) - position.reward_debt;
+        let pending =
+            (position.amount * state.reward_per_share_acc / PRECISION) - position.reward_debt;
         position.pending_rewards += pending;
 
         // Update position and state
@@ -220,14 +259,24 @@ impl Staking {
         state.total_staked -= amount;
 
         // Transfer tokens back to user
-        let staking_token: Address = env.storage().instance().get(&DataKey::StakingToken).unwrap();
+        let staking_token: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::StakingToken)
+            .unwrap();
         let token_client = token::Client::new(&env, &staking_token);
         token_client.transfer(&env.current_contract_address(), &user, &amount);
 
-        env.storage().persistent().set(&DataKey::Position(user.clone()), &position);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Position(user.clone()), &position);
         env.storage().instance().set(&DataKey::GlobalState, &state);
 
-        Unstaked { user: user.clone(), amount }.publish(&env);
+        Unstaked {
+            user: user.clone(),
+            amount,
+        }
+        .publish(&env);
 
         Ok(())
     }
@@ -245,25 +294,40 @@ impl Staking {
             .get(&DataKey::Position(user.clone()))
             .ok_or(Error::InvalidAmount)?;
 
-        let pending = (position.amount * state.reward_per_share_acc / PRECISION) - position.reward_debt;
+        let pending =
+            (position.amount * state.reward_per_share_acc / PRECISION) - position.reward_debt;
         let total_claimable = position.pending_rewards + pending;
 
         if total_claimable <= 0 {
             return Ok(0);
         }
 
+        let eligibility =
+            Self::build_claim_eligibility(env.ledger().timestamp(), position.last_claim_timestamp);
+        if !eligibility.eligible_now {
+            return Err(Error::ClaimCooldownActive);
+        }
+
         // Reset user rewards
         position.pending_rewards = 0;
         position.reward_debt = position.amount * state.reward_per_share_acc / PRECISION;
+        position.last_claim_timestamp = env.ledger().timestamp();
 
         // Transfer reward tokens
-        let reward_token_addr: Address = env.storage().instance().get(&DataKey::RewardToken).unwrap();
+        let reward_token_addr: Address =
+            env.storage().instance().get(&DataKey::RewardToken).unwrap();
         let token_client = token::Client::new(&env, &reward_token_addr);
         token_client.transfer(&env.current_contract_address(), &user, &total_claimable);
 
-        env.storage().persistent().set(&DataKey::Position(user.clone()), &position);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Position(user.clone()), &position);
 
-        RewardsClaimed { user: user.clone(), amount: total_claimable }.publish(&env);
+        RewardsClaimed {
+            user: user.clone(),
+            amount: total_claimable,
+        }
+        .publish(&env);
 
         Ok(total_claimable)
     }
@@ -278,21 +342,56 @@ impl Staking {
                 amount: 0,
                 reward_debt: 0,
                 pending_rewards: 0,
+                last_claim_timestamp: 0,
             });
 
         // Calculate dynamic pending rewards for the view call
-        if let Some(mut state) = env.storage().instance().get::<_, GlobalState>(&DataKey::GlobalState) {
+        if let Some(mut state) = env
+            .storage()
+            .instance()
+            .get::<_, GlobalState>(&DataKey::GlobalState)
+        {
             let timestamp = env.ledger().timestamp();
             if timestamp > state.last_update_timestamp && state.total_staked > 0 {
                 let duration = (timestamp - state.last_update_timestamp) as i128;
                 let rewards = duration * state.reward_rate;
                 state.reward_per_share_acc += rewards * PRECISION / state.total_staked;
             }
-            let pending = (position.amount * state.reward_per_share_acc / PRECISION) - position.reward_debt;
+            let pending =
+                (position.amount * state.reward_per_share_acc / PRECISION) - position.reward_debt;
             position.pending_rewards += pending;
         }
 
         position
+    }
+
+    /// Preview pending rewards and current claimability without mutating state.
+    pub fn preview_rewards(env: Env, user: Address) -> Result<RewardPreview, Error> {
+        let state = Self::state_at_current_ledger(&env)?;
+        let position = Self::position_with_dynamic_rewards(&env, &state, user);
+        let claimability =
+            Self::build_claim_eligibility(env.ledger().timestamp(), position.last_claim_timestamp);
+
+        Ok(RewardPreview {
+            staked_amount: position.amount,
+            pending_rewards: position.pending_rewards,
+            claimable_now: if claimability.eligible_now {
+                position.pending_rewards
+            } else {
+                0
+            },
+            cooldown_seconds: CLAIM_COOLDOWN_SECONDS,
+            eligible_now: claimability.eligible_now,
+        })
+    }
+
+    /// Return deterministic next-claim eligibility metadata for a staker.
+    pub fn next_claim(env: Env, user: Address) -> Result<ClaimEligibility, Error> {
+        let position = Self::position_or_default(&env, user);
+        Ok(Self::build_claim_eligibility(
+            env.ledger().timestamp(),
+            position.last_claim_timestamp,
+        ))
     }
 
     // -----------------------------------------------------------------------
@@ -300,7 +399,11 @@ impl Staking {
     // -----------------------------------------------------------------------
 
     fn update_pool(env: &Env) -> Result<(), Error> {
-        let mut state: GlobalState = env.storage().instance().get(&DataKey::GlobalState).ok_or(Error::NotInitialized)?;
+        let mut state: GlobalState = env
+            .storage()
+            .instance()
+            .get(&DataKey::GlobalState)
+            .ok_or(Error::NotInitialized)?;
         let timestamp = env.ledger().timestamp();
 
         if timestamp <= state.last_update_timestamp {
@@ -320,7 +423,82 @@ impl Staking {
     }
 
     fn require_initialized(env: &Env) -> Result<Address, Error> {
-        env.storage().instance().get(&DataKey::Admin).ok_or(Error::NotInitialized)
+        env.storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)
+    }
+
+    fn state_at_current_ledger(env: &Env) -> Result<GlobalState, Error> {
+        let mut state: GlobalState = env
+            .storage()
+            .instance()
+            .get(&DataKey::GlobalState)
+            .ok_or(Error::NotInitialized)?;
+        let timestamp = env.ledger().timestamp();
+
+        if timestamp > state.last_update_timestamp && state.total_staked > 0 {
+            let duration = (timestamp - state.last_update_timestamp) as i128;
+            let rewards = duration * state.reward_rate;
+            state.reward_per_share_acc += rewards * PRECISION / state.total_staked;
+            state.last_update_timestamp = timestamp;
+        }
+
+        Ok(state)
+    }
+
+    fn position_or_default(env: &Env, user: Address) -> UserPosition {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Position(user))
+            .unwrap_or(UserPosition {
+                amount: 0,
+                reward_debt: 0,
+                pending_rewards: 0,
+                last_claim_timestamp: 0,
+            })
+    }
+
+    fn position_with_dynamic_rewards(
+        env: &Env,
+        state: &GlobalState,
+        user: Address,
+    ) -> UserPosition {
+        let mut position = Self::position_or_default(env, user);
+        let pending =
+            (position.amount * state.reward_per_share_acc / PRECISION) - position.reward_debt;
+        position.pending_rewards += pending;
+        position
+    }
+
+    fn build_claim_eligibility(now: u64, last_claim_timestamp: u64) -> ClaimEligibility {
+        if last_claim_timestamp == 0 {
+            return ClaimEligibility {
+                eligible_now: true,
+                next_claim_timestamp: now,
+                cooldown_remaining_seconds: 0,
+                cooldown_seconds: CLAIM_COOLDOWN_SECONDS,
+            };
+        }
+
+        let next_claim_timestamp = last_claim_timestamp
+            .checked_add(CLAIM_COOLDOWN_SECONDS)
+            .unwrap_or(u64::MAX);
+        if now >= next_claim_timestamp {
+            ClaimEligibility {
+                eligible_now: true,
+                next_claim_timestamp,
+                cooldown_remaining_seconds: 0,
+                cooldown_seconds: CLAIM_COOLDOWN_SECONDS,
+            }
+        } else {
+            ClaimEligibility {
+                eligible_now: false,
+                next_claim_timestamp,
+                cooldown_remaining_seconds: next_claim_timestamp - now,
+                cooldown_seconds: CLAIM_COOLDOWN_SECONDS,
+            }
+        }
     }
 }
 
@@ -397,7 +575,9 @@ mod test {
     #[test]
     fn test_init_twice_fails() {
         let s = setup();
-        let result = s.client.try_init(&s.admin, &s.staking_token_addr, &s.reward_token_addr);
+        let result = s
+            .client
+            .try_init(&s.admin, &s.staking_token_addr, &s.reward_token_addr);
         assert_eq!(result, Err(Ok(Error::AlreadyInitialized)));
     }
 
@@ -429,7 +609,9 @@ mod test {
         s.client.stake(&s.user1, &stake_amount);
 
         // Advance time by 10 seconds
-        s.env.ledger().set_timestamp(s.env.ledger().timestamp() + 10);
+        s.env
+            .ledger()
+            .set_timestamp(s.env.ledger().timestamp() + 10);
 
         let pos = s.client.position_of(&s.user1);
         // Expected rewards: 10 seconds * 10 rate = 100 rewards
@@ -451,7 +633,9 @@ mod test {
         s.client.stake(&s.user1, &stake_amount);
 
         // Advance time by 100 seconds (1000 rewards)
-        s.env.ledger().set_timestamp(s.env.ledger().timestamp() + 100);
+        s.env
+            .ledger()
+            .set_timestamp(s.env.ledger().timestamp() + 100);
 
         let claimed = s.client.claim_rewards(&s.user1);
         assert_eq!(claimed, 1000i128);
@@ -473,14 +657,18 @@ mod test {
         s.client.stake(&s.user1, &1000i128);
 
         // Advance 10 seconds (1000 rewards accrued to User 1)
-        s.env.ledger().set_timestamp(s.env.ledger().timestamp() + 10);
+        s.env
+            .ledger()
+            .set_timestamp(s.env.ledger().timestamp() + 10);
 
         // User 2 stakes 1000
         s.staking_token.mint(&s.user2, &1000i128);
         s.client.stake(&s.user2, &1000i128);
 
         // Advance 10 seconds (1000 rewards split between User 1 and User 2)
-        s.env.ledger().set_timestamp(s.env.ledger().timestamp() + 10);
+        s.env
+            .ledger()
+            .set_timestamp(s.env.ledger().timestamp() + 10);
 
         let pos1 = s.client.position_of(&s.user1);
         let pos2 = s.client.position_of(&s.user2);
@@ -498,5 +686,68 @@ mod test {
         s.staking_token.mint(&s.user1, &100i128);
         s.client.stake(&s.user1, &100i128);
         s.client.unstake(&s.user1, &101i128);
+    }
+
+    #[test]
+    fn test_preview_rewards_for_missing_staker() {
+        let s = setup();
+
+        let preview = s.client.preview_rewards(&s.user1);
+        assert_eq!(preview.staked_amount, 0);
+        assert_eq!(preview.pending_rewards, 0);
+        assert_eq!(preview.claimable_now, 0);
+        assert!(preview.eligible_now);
+
+        let eligibility = s.client.next_claim(&s.user1);
+        assert!(eligibility.eligible_now);
+        assert_eq!(eligibility.cooldown_remaining_seconds, 0);
+    }
+
+    #[test]
+    fn test_preview_rewards_for_active_staker() {
+        let s = setup();
+        let stake_amount = 1000i128;
+        let rate = 25i128;
+
+        s.client.set_reward_rate(&s.admin, &rate);
+        s.staking_token.mint(&s.user1, &stake_amount);
+        s.client.stake(&s.user1, &stake_amount);
+
+        s.env.ledger().set_timestamp(s.env.ledger().timestamp() + 8);
+
+        let preview = s.client.preview_rewards(&s.user1);
+        assert_eq!(preview.staked_amount, stake_amount);
+        assert_eq!(preview.pending_rewards, 200);
+        assert_eq!(preview.claimable_now, 200);
+        assert!(preview.eligible_now);
+    }
+
+    #[test]
+    fn test_preview_rewards_when_claim_cooldown_is_active() {
+        let s = setup();
+        let stake_amount = 1000i128;
+        let rate = 10i128;
+
+        s.reward_token.mint(&s.client.address, &10_000i128);
+        s.client.set_reward_rate(&s.admin, &rate);
+        s.staking_token.mint(&s.user1, &stake_amount);
+        s.client.stake(&s.user1, &stake_amount);
+
+        s.env
+            .ledger()
+            .set_timestamp(s.env.ledger().timestamp() + 10);
+        let claimed = s.client.claim_rewards(&s.user1);
+        assert_eq!(claimed, 100);
+
+        s.env.ledger().set_timestamp(s.env.ledger().timestamp() + 5);
+        let preview = s.client.preview_rewards(&s.user1);
+        assert_eq!(preview.pending_rewards, 50);
+        assert_eq!(preview.claimable_now, 0);
+        assert!(!preview.eligible_now);
+
+        let eligibility = s.client.next_claim(&s.user1);
+        assert!(!eligibility.eligible_now);
+        assert_eq!(eligibility.cooldown_remaining_seconds, 55);
+        assert_eq!(eligibility.next_claim_timestamp, 70);
     }
 }

@@ -152,3 +152,52 @@ pub fn is_joined(env: Env, id: u64, player: Address) -> bool
 
 `bool`
 
+### `get_bracket_summary`
+```rust
+pub fn get_bracket_summary(env: Env, id: u64) -> Result<BracketSummary, Error>
+```
+
+#### Parameters
+
+| Name | Type |
+|------|------|
+| `env` | `Env` |
+| `id` | `u64` |
+
+#### Return Type
+
+`Result<BracketSummary, Error>`
+
+### `get_next_matches`
+```rust
+pub fn get_next_matches(env: Env, id: u64) -> Result<soroban_sdk::Vec<Matchup>, Error>
+```
+
+#### Parameters
+
+| Name | Type |
+|------|------|
+| `env` | `Env` |
+| `id` | `u64` |
+
+#### Return Type
+
+`Result<soroban_sdk::Vec<Matchup>, Error>`
+
+### `advance_round`
+```rust
+pub fn advance_round(env: Env, admin: Address, id: u64) -> Result<(), Error>
+```
+
+#### Parameters
+
+| Name | Type |
+|------|------|
+| `env` | `Env` |
+| `admin` | `Address` |
+| `id` | `u64` |
+
+#### Return Type
+
+`Result<(), Error>`
+

@@ -31,6 +31,25 @@ pub struct OracleRequest {
     pub payload: Bytes,
 }
 
+#[derive(Clone)]
+#[contracttype]
+pub struct LatestPriceData {
+    pub payload: Bytes,
+    pub updated_ledger: u32,
+}
+
+#[derive(Clone)]
+#[contracttype]
+pub struct PriceFreshness {
+    pub has_price: bool,
+    pub payload: Bytes,
+    pub updated_ledger: u32,
+    pub current_ledger: u32,
+    pub age_ledgers: u32,
+    pub stale_threshold_ledgers: u32,
+    pub is_stale: bool,
+}
+
 //
 // ─────────────────────────────────────────────
 // EVENTS
@@ -80,6 +99,7 @@ pub enum Error {
 //
 
 const TTL_RENEW_WINDOW: u32 = 1_000;
+const STALE_THRESHOLD_LEDGERS: u32 = 20;
 
 fn renew_persistent_ttl(env: &Env, key: &DataKey) -> Result<(), Error> {
     let max_ttl = env.storage().max_ttl();
@@ -236,8 +256,12 @@ impl OracleIntegration {
         renew_persistent_ttl(&env, &req_key)?;
 
         let latest_key = DataKey::Latest(request.feed_id.clone());
+        let latest = LatestPriceData {
+            payload: payload.clone(),
+            updated_ledger: env.ledger().sequence(),
+        };
 
-        env.storage().persistent().set(&latest_key, &payload);
+        env.storage().persistent().set(&latest_key, &latest);
         renew_persistent_ttl(&env, &latest_key)?;
 
         let feed_id = request.feed_id.clone();
@@ -255,13 +279,13 @@ impl OracleIntegration {
 
     pub fn latest(env: Env, feed_id: BytesN<32>) -> Option<Bytes> {
         let key = DataKey::Latest(feed_id);
-        let result = env.storage().persistent().get(&key);
+        let result: Option<LatestPriceData> = env.storage().persistent().get(&key);
 
         if result.is_some() {
             renew_persistent_ttl(&env, &key).ok();
         }
 
-        result
+        result.map(|latest| latest.payload)
     }
 
     pub fn get_request(env: Env, request_id: BytesN<32>) -> Option<OracleRequest> {
@@ -273,6 +297,36 @@ impl OracleIntegration {
         }
 
         result
+    }
+
+    pub fn last_price_freshness(env: Env, feed_id: BytesN<32>) -> PriceFreshness {
+        let current_ledger = env.ledger().sequence();
+        let key = DataKey::Latest(feed_id);
+        let latest: Option<LatestPriceData> = env.storage().persistent().get(&key);
+
+        match latest {
+            Some(latest) => {
+                let age_ledgers = current_ledger.saturating_sub(latest.updated_ledger);
+                PriceFreshness {
+                    has_price: true,
+                    payload: latest.payload,
+                    updated_ledger: latest.updated_ledger,
+                    current_ledger,
+                    age_ledgers,
+                    stale_threshold_ledgers: STALE_THRESHOLD_LEDGERS,
+                    is_stale: age_ledgers > STALE_THRESHOLD_LEDGERS,
+                }
+            }
+            None => PriceFreshness {
+                has_price: false,
+                payload: Bytes::new(&env),
+                updated_ledger: 0,
+                current_ledger,
+                age_ledgers: 0,
+                stale_threshold_ledgers: STALE_THRESHOLD_LEDGERS,
+                is_stale: true,
+            },
+        }
     }
 }
 

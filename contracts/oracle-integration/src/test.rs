@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::testutils::{Address as _, MockAuth, MockAuthInvoke};
+use soroban_sdk::testutils::{Address as _, Ledger as _, MockAuth, MockAuthInvoke};
 use soroban_sdk::{vec, Address, Bytes, Env, IntoVal};
 
 /// Non-zero 32-byte id for feeds and request keys in tests.
@@ -380,4 +380,66 @@ fn get_request_none_when_missing() {
     let env = Env::default();
     let (client, _, _, _, _) = setup_initialized(&env);
     assert!(client.get_request(&id32(&env, 31)).is_none());
+}
+
+#[test]
+fn last_price_freshness_reports_fresh_prices() {
+    let env = Env::default();
+    let (client, _, _, oracle, user) = setup_initialized(&env);
+    env.mock_all_auths();
+
+    env.ledger().set_sequence_number(50);
+    let feed = id32(&env, 32);
+    let rid = id32(&env, 33);
+    client.request_data(&user, &feed, &rid);
+
+    let payload = Bytes::from_slice(&env, b"price=99");
+    client.fulfill_data(&oracle, &rid, &payload, &Bytes::new(&env));
+
+    env.ledger().set_sequence_number(60);
+    let freshness = client.last_price_freshness(&feed);
+    assert!(freshness.has_price);
+    assert_eq!(freshness.payload, payload);
+    assert_eq!(freshness.updated_ledger, 50);
+    assert_eq!(freshness.current_ledger, 60);
+    assert_eq!(freshness.age_ledgers, 10);
+    assert!(!freshness.is_stale);
+}
+
+#[test]
+fn last_price_freshness_reports_stale_prices() {
+    let env = Env::default();
+    let (client, _, _, oracle, user) = setup_initialized(&env);
+    env.mock_all_auths();
+
+    env.ledger().set_sequence_number(7);
+    let feed = id32(&env, 34);
+    let rid = id32(&env, 35);
+    client.request_data(&user, &feed, &rid);
+
+    let payload = Bytes::from_slice(&env, b"price=101");
+    client.fulfill_data(&oracle, &rid, &payload, &Bytes::new(&env));
+
+    env.ledger().set_sequence_number(40);
+    let freshness = client.last_price_freshness(&feed);
+    assert!(freshness.has_price);
+    assert_eq!(freshness.updated_ledger, 7);
+    assert_eq!(freshness.age_ledgers, 33);
+    assert_eq!(freshness.stale_threshold_ledgers, 20);
+    assert!(freshness.is_stale);
+}
+
+#[test]
+fn last_price_freshness_handles_missing_prices() {
+    let env = Env::default();
+    let (client, _, _, _, _) = setup_initialized(&env);
+    env.ledger().set_sequence_number(88);
+
+    let freshness = client.last_price_freshness(&id32(&env, 36));
+    assert!(!freshness.has_price);
+    assert_eq!(freshness.payload.len(), 0);
+    assert_eq!(freshness.updated_ledger, 0);
+    assert_eq!(freshness.current_ledger, 88);
+    assert_eq!(freshness.age_ledgers, 0);
+    assert!(freshness.is_stale);
 }
