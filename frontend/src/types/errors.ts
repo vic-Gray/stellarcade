@@ -96,7 +96,7 @@ export type AppErrorCode =
   | 'UNKNOWN';
 
 export interface AppError {
-  /** Structured code for programmatic branching — never parse `message` for logic. */
+  /** Structured code for programmatic branching - never parse `message` for logic. */
   code: AppErrorCode;
   domain: ErrorDomain;
   severity: ErrorSeverity;
@@ -111,6 +111,18 @@ export interface AppError {
   context?: Record<string, unknown>;
   /** For RETRYABLE errors: suggested minimum wait before retrying (ms). */
   retryAfterMs?: number;
+  /** Structured API error details for support/QA workflows. */
+  apiDetails?: ApiErrorDetails;
+}
+
+/** Structured error details returned by backend API responses. */
+export interface ApiErrorDetails {
+  /** Backend error code (e.g. "VALIDATION_FAILED", "RATE_LIMITED"). */
+  errorCode?: string;
+  /** Correlation/request ID for support tracing. */
+  requestId?: string;
+  /** Per-field validation errors. */
+  fieldErrors?: Array<{ field: string; message: string }>;
 }
 
 export type ErrorMappingHint = ErrorDomain;

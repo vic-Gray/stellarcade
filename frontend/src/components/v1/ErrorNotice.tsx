@@ -7,7 +7,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppError } from '../../types/errors';
+import { AppError, ApiErrorDetails } from '../../types/errors';
 import {
   isBannerDismissed,
   persistBannerDismissal,
@@ -99,6 +99,56 @@ const DebugInfo: React.FC<DebugInfoProps> = ({ debug, testId }) => {
         {debug.retryAfterMs && (
           <div className="error-notice__debug-section">
             <strong>Retry After:</strong> {debug.retryAfterMs}ms
+          </div>
+        )}
+      </div>
+    </details>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// API Error Details
+// ---------------------------------------------------------------------------
+
+interface ApiErrorDetailsSectionProps {
+  details: ApiErrorDetails;
+  testId?: string;
+}
+
+const ApiErrorDetailsSection: React.FC<ApiErrorDetailsSectionProps> = ({ details, testId }) => {
+  const hasContent = details.errorCode || details.requestId || (details.fieldErrors && details.fieldErrors.length > 0);
+  if (!hasContent) return null;
+
+  return (
+    <details
+      className="error-notice__api-details"
+      data-testid={testId ? `${testId}-api-details` : 'error-notice-api-details'}
+    >
+      <summary className="error-notice__debug-summary">Error Details</summary>
+      <div className="error-notice__debug-content">
+        {details.errorCode && (
+          <div className="error-notice__debug-section">
+            <strong>Error Code:</strong> {details.errorCode}
+          </div>
+        )}
+        {details.requestId && (
+          <div className="error-notice__debug-section">
+            <strong>Request ID:</strong>{' '}
+            <code data-testid={testId ? `${testId}-request-id` : 'error-notice-request-id'}>
+              {details.requestId}
+            </code>
+          </div>
+        )}
+        {details.fieldErrors && details.fieldErrors.length > 0 && (
+          <div className="error-notice__debug-section">
+            <strong>Field Errors:</strong>
+            <ul className="error-notice__field-errors">
+              {details.fieldErrors.map((fe, i) => (
+                <li key={`${fe.field}-${i}`}>
+                  <strong>{fe.field}:</strong> {fe.message}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>
@@ -272,6 +322,11 @@ export const ErrorNotice: React.FC<ErrorNoticeProps> = ({
           </button>
         )}
       </div>
+
+      {/* Structured API Error Details */}
+      {error && typeof error === 'object' && 'apiDetails' in error && (error as AppError).apiDetails && (
+        <ApiErrorDetailsSection details={(error as AppError).apiDetails!} testId={testId} />
+      )}
 
       {/* Debug Information */}
       {errorData.debug && (
