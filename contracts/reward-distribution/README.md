@@ -94,6 +94,58 @@ Return whether a user has already executed a successful claim from a campaign.
 
 ---
 
+### `preview_batch(campaign_id, entries) → BatchPreview`
+
+Preview a proposed distribution batch without mutating any state.
+
+Mirrors execution-time validation exactly — the result reflects what would happen if the batch were submitted right now.  Always returns a `BatchPreview`; only returns `Err(BatchInvalid)` when `entries` is empty.
+
+```rust
+pub struct BatchEntry {
+    pub user:   Address,
+    pub amount: i128,
+}
+
+pub struct BatchPreview {
+    pub campaign_id:     u32,
+    pub entry_count:     u32,
+    pub total_amount:    i128,
+    pub remaining_after: i128,  // budget remaining if batch applied
+    pub would_succeed:   bool,
+    pub failure_reason:  Option<Error>,  // first error that would be raised
+}
+```
+
+| Scenario | `would_succeed` | `failure_reason` |
+|---|---|---|
+| Valid batch | `true` | `None` |
+| Unknown campaign | `false` | `CampaignNotFound` |
+| Campaign not active | `false` | `CampaignNotActive` |
+| Batch exceeds remaining | `false` | `CampaignExhausted` |
+| Any entry amount ≤ 0 | `false` | `InvalidAmount` |
+| Empty entries | `Err(BatchInvalid)` | — |
+
+---
+
+### `distribution_status(campaign_id) → DistributionStatus`
+
+Return a compact status snapshot for a campaign.  Never panics — returns `exists: false` for unknown campaign IDs.
+
+```rust
+pub struct DistributionStatus {
+    pub campaign_id:  u32,
+    pub status:       CampaignStatus,
+    pub budget:       i128,
+    pub remaining:    i128,
+    pub distributed:  i128,  // budget − remaining
+    pub exists:       bool,
+}
+```
+
+Missing batch IDs return a zeroed snapshot with `exists: false`.  Callers should check `exists` before interpreting any other field.
+
+---
+
 ## Events
 
 | Topic symbol | When emitted            | Data payload                                             |
